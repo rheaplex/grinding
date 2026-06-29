@@ -1,0 +1,11 @@
+[package]
+name = "rehashed"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cudarc = { version = "0.12", features = ["cuda-12060"] }  # match your CUDA toolkit
+bytemuck = "1"
+sha2 = "0.10"  # host-side recompute + verification of GPU results
+serde = { version = "1", features = ["derive"] }  # parse tasks.toml
+toml = "0.8"
