@@ -133,11 +133,59 @@ impl TargetMode {
     }
 }
 
-/// A fan-out search: grind `base ‖ nonce` looking for `targets`.
-/// `self` is just `base` with `targets = [base]`. Built from a `TaskConfig`.
+/// Longest `base` allowed in `SourceMode::Plain` — the same 32 bytes a `Hashed`
+/// digest occupies, so either way the preimage is at most 32 + 8 = 40 bytes.
+const PLAIN_MAX: usize = 32;
+
+/// How a task's source text becomes the fixed prefix the nonce is hashed into.
+/// Required per task: there is no default, because the two produce different
+/// hashes and the choice is the point, not an implementation detail.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SourceMode {
+    /// Plaintext used neat: preimage = `base ‖ nonce`, so the cleartext is
+    /// legible in the preimage and the target text surfaces in the digests that
+    /// follow. Capped at `PLAIN_MAX` bytes.
+    Plain,
+    /// For text too long to sit in a block: preimage = `SHA256(base) ‖ nonce`.
+    /// No length limit, but only the digest of the source is in the preimage —
+    /// the cleartext itself is no longer there to read.
+    Hashed,
+}
+
+impl SourceMode {
+    fn slug(self) -> &'static str {
+        match self {
+            SourceMode::Plain => "plain",
+            SourceMode::Hashed => "hashed",
+        }
+    }
+    fn from_slug(s: &str) -> Result<Self, String> {
+        match s {
+            "plain" => Ok(SourceMode::Plain),
+            "hashed" => Ok(SourceMode::Hashed),
+            other => Err(format!("unknown source_mode {other:?}{}", Self::help())),
+        }
+    }
+
+    /// The two choices spelled out — appended to every error that has to explain
+    /// what `source_mode` wants, since there is no default to fall back on.
+    fn help() -> String {
+        format!(
+            "\n  source_mode = \"plain\"   preimage = base ‖ nonce; cleartext readable in the preimage (base <= {PLAIN_MAX} bytes)\
+             \n  source_mode = \"hashed\"  preimage = SHA256(base) ‖ nonce; any base length, no cleartext in the preimage"
+        )
+    }
+}
+
+/// A fan-out search: grind `setup ‖ nonce` looking for `targets`. `setup` is
+/// either the plaintext `base` itself (`Plain`) or `SHA256(base)` (`Hashed`),
+/// per the task's `source_mode`. Built from a `TaskConfig`.
+#[derive(Debug)]
 struct Task {
     label: String,
     base: String,
+    source_mode: SourceMode,
+    setup: Vec<u8>, // the fixed prefix the nonce is hashed into: base bytes, or SHA256(base)
     targets: Vec<String>,
     encoding: Encoding,
     position: PositionMode,
@@ -241,16 +289,24 @@ fn normalized_text(enc: Encoding, target: &str) -> String {
     }
 }
 
-/// Build the fixed message block: preimage = base ‖ <8 LE nonce bytes>, padded
+/// The 32-byte setup digest, `SHA256(source)`, computed once per task for
+/// `SourceMode::Hashed`. Lets the source be any length, at the cost of the
+/// cleartext no longer appearing in the preimage.
+fn setup_hash(source: &[u8]) -> [u8; 32] {
+    Sha256::digest(source).into()
+}
+
+/// Build the fixed message block: preimage = setup ‖ <8 LE nonce bytes>, padded
 /// to one SHA-256 block. The nonce region is left zero; the kernel ORs it in.
-/// Returns (16 big-endian words, nonce byte offset).
-fn build_template(base: &[u8]) -> ([u32; 16], u32) {
-    let preimage_len = base.len() + 8;
-    assert!(preimage_len <= 55, "base + 8-byte nonce must fit one block (base <= 47 bytes)");
+/// Returns (16 big-endian words, nonce byte offset). `setup` is at most 32 bytes
+/// either way, so the 40-byte preimage always fits a single block.
+fn build_template(setup: &[u8]) -> ([u32; 16], u32) {
+    let preimage_len = setup.len() + 8;
+    assert!(preimage_len <= 55, "setup + 8-byte nonce must fit one block");
 
     let mut block = [0u8; 64];
-    block[..base.len()].copy_from_slice(base);
-    // bytes [base.len() .. base.len()+8] stay zero — that's where the nonce goes.
+    block[..setup.len()].copy_from_slice(setup);
+    // bytes [setup.len() .. setup.len()+8] stay zero — that's where the nonce goes.
     block[preimage_len] = 0x80; // SHA-256 padding marker
     let bit_len = (preimage_len as u64) * 8;
     block[56..64].copy_from_slice(&bit_len.to_be_bytes());
@@ -259,14 +315,15 @@ fn build_template(base: &[u8]) -> ([u32; 16], u32) {
     for (i, w) in words.iter_mut().enumerate() {
         *w = u32::from_be_bytes(block[i * 4..i * 4 + 4].try_into().unwrap());
     }
-    (words, base.len() as u32)
+    (words, setup.len() as u32)
 }
 
-/// Independent CPU recompute, both to display the winning digest and to verify
-/// the GPU actually found what it claims.
-fn cpu_digest(base: &[u8], nonce: u64) -> [u8; 32] {
+/// Independent CPU recompute of `SHA256(setup ‖ nonce)` via the `sha2` crate,
+/// both to display the winning digest and to verify the GPU actually found what
+/// it claims.
+fn cpu_digest(setup: &[u8], nonce: u64) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(base);
+    hasher.update(setup);
     hasher.update(nonce.to_le_bytes());
     hasher.finalize().into()
 }
@@ -354,7 +411,7 @@ struct CsvLog {
 }
 
 impl CsvLog {
-    const HEADER: &'static str = "unix_time,task,base,encoding,target,encoded_text,\
+    const HEADER: &'static str = "unix_time,task,base,source_mode,encoding,target,encoded_text,\
 position_mode,match_mode,target_mode,matched_chars,total_chars,matched_bits,target_bits,\
 match_pos,full,prefix,nonce,nonce_hex,digest";
 
@@ -557,7 +614,7 @@ fn record(
     best: (u32, u32, u64),
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (best_len, best_pos, best_nonce) = best;
-    let digest = cpu_digest(task.base.as_bytes(), best_nonce);
+    let digest = cpu_digest(&task.setup, best_nonce);
     let (vlen, vpos) = best_match(&digest_words(&digest), target_bits, care_bits, num_bits, num_positions);
     let verified = vlen == best_len && (best_len == 0 || vpos == best_pos);
 
@@ -586,6 +643,7 @@ fn record(
         unix_now().to_string(),
         task.label.to_string(),
         task.base.to_string(),
+        task.source_mode.slug().to_string(),
         task.encoding.slug(),
         target.to_string(),
         normalized_text(task.encoding, target),
@@ -627,8 +685,21 @@ struct RunConfig {
 #[derive(Deserialize)]
 struct TaskConfig {
     label: String,
+    /// The initial plaintext, hashed as `base ‖ nonce`. `from` is an alias, so a
+    /// task can read naturally as `from = "…"` / `to = "…"`.
+    #[serde(alias = "from")]
     base: String,
+    /// Explicit target list. Omit when using `to`.
+    #[serde(default)]
     targets: Vec<String>,
+    /// Shorthand: one string split on whitespace into successive targets, e.g.
+    /// `to = "to this"` -> ["to", "this"]. Mutually exclusive with `targets`;
+    /// implies target_mode = collect_in_order unless one is set explicitly.
+    to: Option<String>,
+    /// Required, no default: "plain" (cleartext in the preimage, base <= 32
+    /// bytes) or "hashed" (SHA256(base) in the preimage, any length). Optional
+    /// here only so a missing value gets a useful error instead of serde's.
+    source_mode: Option<String>,
     encoding: String,
     position: Option<String>,
     match_mode: Option<String>,
@@ -645,19 +716,59 @@ fn parse_or<T>(o: Option<String>, default: T, f: fn(&str) -> Result<T, String>) 
 
 impl TaskConfig {
     fn build(self) -> Result<Task, String> {
-        if self.targets.is_empty() {
-            return Err(format!("task {:?} has no targets", self.label));
-        }
         let label = self.label.clone();
         let ctx = move |e: String| format!("task {label:?}: {e}");
+
+        // Targets come from an explicit `targets` list or the `to` shorthand
+        // (split on whitespace), but never both. `to` reads as "search for these
+        // words in turn", so it defaults to collect_in_order.
+        let (targets, default_target_mode) = match (self.targets.is_empty(), self.to) {
+            (false, None) => (self.targets, TargetMode::Each),
+            (true, Some(to)) => (
+                to.split_whitespace().map(str::to_string).collect(),
+                TargetMode::CollectInOrder,
+            ),
+            (false, Some(_)) => return Err(ctx("set `targets` or `to`, not both".into())),
+            (true, None) => return Err(ctx("no targets (set `targets` or `to`)".into())),
+        };
+        if targets.is_empty() {
+            return Err(ctx("`to` had no whitespace-separated words".into()));
+        }
+
+        // `plain` keeps the cleartext readable in the preimage, so it only works
+        // while base fits beside the nonce in one block; `hashed` lifts that at
+        // the cost of the cleartext. Refuse to silently pick one.
+        let source_mode = match &self.source_mode {
+            Some(s) => SourceMode::from_slug(s).map_err(&ctx)?,
+            None => {
+                return Err(ctx(format!(
+                    "source_mode is required and has no default — set it explicitly:{}",
+                    SourceMode::help()
+                )));
+            }
+        };
+        let setup = match source_mode {
+            SourceMode::Plain if self.base.len() > PLAIN_MAX => {
+                return Err(ctx(format!(
+                    "source_mode = \"plain\" needs base <= {PLAIN_MAX} bytes, got {}; \
+                     use source_mode = \"hashed\" for longer text",
+                    self.base.len()
+                )));
+            }
+            SourceMode::Plain => self.base.as_bytes().to_vec(),
+            SourceMode::Hashed => setup_hash(self.base.as_bytes()).to_vec(),
+        };
+
         Ok(Task {
             encoding: Encoding::from_slug(&self.encoding).map_err(&ctx)?,
             position: parse_or(self.position, PositionMode::Prefix, PositionMode::from_slug).map_err(&ctx)?,
             match_mode: parse_or(self.match_mode, MatchMode::Longest, MatchMode::from_slug).map_err(&ctx)?,
-            target_mode: parse_or(self.target_mode, TargetMode::Each, TargetMode::from_slug).map_err(&ctx)?,
+            target_mode: parse_or(self.target_mode, default_target_mode, TargetMode::from_slug).map_err(&ctx)?,
             label: self.label,
+            source_mode,
+            setup,
             base: self.base,
-            targets: self.targets,
+            targets,
         })
     }
 }
@@ -709,10 +820,14 @@ fn load_tasks(cli: &Cli) -> Result<(Vec<Task>, u64, String), Box<dyn std::error:
     let budget = 1u64.checked_shl(budget_bits).unwrap_or(u64::MAX);
     let csv = cli.csv.clone().unwrap_or(cfg.run.csv);
 
+    // Build every task, then filter: a malformed task is an error in the config
+    // whether or not this run happens to select it.
     let mut tasks = Vec::new();
     for tc in cfg.task {
-        if cli.only.is_empty() || cli.only.iter().any(|l| l == &tc.label) {
-            tasks.push(tc.build()?);
+        let keep = cli.only.is_empty() || cli.only.iter().any(|l| l == &tc.label);
+        let task = tc.build()?;
+        if keep {
+            tasks.push(task);
         }
     }
     Ok((tasks, budget, csv))
@@ -749,19 +864,116 @@ mod tests {
         let hash = [0xFFF0_0000, 0, 0, 0, 0, 0, 0, 0]; // first 12 bits match, then diverge
         assert_eq!(best_match(&hash, &target, &care, 16, 1), (12, 0));
     }
+
+    /// The GPU hashes `setup ‖ nonce`; in `hashed` mode `setup` must be
+    /// `SHA256(source)` and the digest must layer as
+    /// `SHA256(SHA256(source) ‖ nonce_le)`. Guards the pre-hash and nonce order.
+    #[test]
+    fn hashed_digest_layers_correctly() {
+        let source = b"a source string far longer than the 32-byte plain limit allows";
+        let setup = setup_hash(source);
+        assert_eq!(setup.to_vec(), Sha256::digest(source).to_vec());
+
+        let nonce = 0x0123_4567_89ab_cdefu64;
+        let mut expect = Sha256::new();
+        expect.update(setup);
+        expect.update(nonce.to_le_bytes());
+        let expect: [u8; 32] = expect.finalize().into();
+        assert_eq!(cpu_digest(&setup, nonce), expect);
+    }
+
+    /// Build the first task of a config, surfacing parse and validation errors
+    /// the same way `load_tasks` does.
+    fn build_one(task_toml: &str) -> Result<Task, String> {
+        let src = format!("[run]\nbudget_bits = 8\ncsv = \"x.csv\"\n\n[[task]]\n{task_toml}");
+        let cfg: Config = toml::from_str(&src).map_err(|e| e.to_string())?;
+        cfg.task.into_iter().next().unwrap().build()
+    }
+
+    const REST: &str = "to = \"a b\"\nencoding = \"ascii8\"\n";
+
+    #[test]
+    fn plain_mode_keeps_cleartext_as_the_preimage_prefix() {
+        let t = build_one(&format!(
+            "label = \"p\"\nfrom = \"short enough\"\nsource_mode = \"plain\"\n{REST}"
+        ))
+        .unwrap();
+        assert_eq!(t.source_mode, SourceMode::Plain);
+        assert_eq!(t.setup, b"short enough".to_vec()); // literal cleartext, not a digest
+    }
+
+    #[test]
+    fn hashed_mode_substitutes_the_digest() {
+        let long = "x".repeat(200);
+        let t = build_one(&format!(
+            "label = \"h\"\nfrom = \"{long}\"\nsource_mode = \"hashed\"\n{REST}"
+        ))
+        .unwrap();
+        assert_eq!(t.source_mode, SourceMode::Hashed);
+        assert_eq!(t.setup, Sha256::digest(long.as_bytes()).to_vec());
+    }
+
+    #[test]
+    fn plain_mode_rejects_overlong_base() {
+        let long = "y".repeat(PLAIN_MAX + 1);
+        let err = build_one(&format!(
+            "label = \"p\"\nfrom = \"{long}\"\nsource_mode = \"plain\"\n{REST}"
+        ))
+        .unwrap_err();
+        assert!(err.contains("plain") && err.contains("hashed"), "{err}");
+    }
+
+    #[test]
+    fn plain_mode_accepts_base_exactly_at_the_limit() {
+        let at = "z".repeat(PLAIN_MAX);
+        let t = build_one(&format!(
+            "label = \"p\"\nfrom = \"{at}\"\nsource_mode = \"plain\"\n{REST}"
+        ))
+        .unwrap();
+        assert_eq!(t.setup.len(), PLAIN_MAX);
+    }
+
+    #[test]
+    fn source_mode_must_be_set_and_valid() {
+        // Omitted entirely: named as required, and both choices are spelled out
+        // so the fix is in the message rather than the docs.
+        let missing = build_one(&format!("label = \"m\"\nfrom = \"hi\"\n{REST}")).unwrap_err();
+        for want in ["source_mode", "required", "no default", "plain", "hashed", "32"] {
+            assert!(missing.contains(want), "missing {want:?} from: {missing}");
+        }
+
+        // A wrong value gets the same guidance, not just a rejection.
+        let bogus = build_one(&format!(
+            "label = \"m\"\nfrom = \"hi\"\nsource_mode = \"neat\"\n{REST}"
+        ))
+        .unwrap_err();
+        for want in ["neat", "plain", "hashed"] {
+            assert!(bogus.contains(want), "missing {want:?} from: {bogus}");
+        }
+    }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
+    // Print errors via Display, not Debug — config errors are multi-line prose
+    // and Debug would escape them into a single \n-riddled line.
+    if let Err(e) = run() {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = parse_cli()?;
     let (tasks, budget, csv_path) = load_tasks(&cli)?;
 
     if cli.list {
         for t in &tasks {
             println!(
-                "{:<14} {:?} -> {:?}  [{}, {}, {}, {}]",
+                "{:<14} {:?} -> {:?}  [{}, {}, {}, {}, {}]",
                 t.label,
                 t.base,
                 t.targets,
+                t.source_mode.slug(),
                 t.encoding.slug(),
                 t.position.slug(),
                 t.match_mode.slug(),
@@ -793,7 +1005,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     for task in tasks {
-        let (template, nonce_off) = build_template(task.base.as_bytes());
+        let (template, nonce_off) = build_template(&task.setup);
         let d_template = eng.dev.htod_copy(template.to_vec())?;
         let num_positions = task.position.num_positions();
         let enc = |t: &str| encode_target(task.encoding, t);

@@ -3,7 +3,10 @@
 typedef unsigned int uint32_t;
 
 // ---------------------------------------------------------------------------
-// SHA-256 core (single 512-bit block; preimage must be <= 55 bytes).
+// SHA-256 core (single 512-bit block). The preimage is `setup ‖ nonce`, where
+// the host makes setup either the plaintext source (<= 32 bytes) or
+// SHA256(source) (32 bytes) — so the preimage is at most 40 bytes and always
+// fits one block.
 // ---------------------------------------------------------------------------
 
 __constant__ uint32_t K[64] = {
@@ -75,7 +78,7 @@ __device__ __forceinline__ uint32_t win32(const uint32_t a[8], uint32_t p) {
 // ---------------------------------------------------------------------------
 // Vanity search kernel.
 //
-// One (base, target) search at a time, host-driven. Every thread grinds `iters`
+// One (setup, target) search at a time, host-driven. Every thread grinds `iters`
 // nonces from a grid-strided slice of the nonce space, hashes preimage =
 // template with the 64-bit little-endian nonce injected at `nonce_byte_offset`,
 // then finds the LONGEST run of leading target bits (under the care-mask) that
