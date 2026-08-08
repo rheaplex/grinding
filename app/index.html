@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grinding</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<main class="plate-page">
+
+  <section class="titleblock">
+    <div class="micro kicker">2026<br>Rhea Myers</div>
+    <h1><em>Grinding</em></h1>
+  </section>
+
+  <section class="works">
+    <a class="work" href="colour.html">
+      <span class="micro dim work-index">01</span>
+      <span class="work-title">Colour</span>
+      <span class="note work-note">six words ground from red &mdash; orange, yellow, green, blue, purple, red</span>
+    </a>
+    <a class="work" href="number.html">
+      <span class="micro dim work-index">02</span>
+      <span class="work-title">Number</span>
+      <span class="note work-note">nine words ground from one &mdash; two through ten</span>
+    </a>
+    <a class="work" href="shape.html">
+      <span class="micro dim work-index">03</span>
+      <span class="work-title">Shape</span>
+      <span class="note work-note">square found from circle; triangle reached triang</span>
+    </a>
+    <a class="work" href="form.html">
+      <span class="micro dim work-index">04</span>
+      <span class="work-title">Form</span>
+      <span class="note work-note">line, plane, and volume ground from point</span>
+    </a>
+  </section>
+
+  <footer class="colophon">
+    <div class="packages">
+      <div class="package"><span class="name">grinding</span><br>
+        <span class="note">Proof-of-work text search. Each candidate hashes a base with a nonce appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word.</span></div>
+      <div class="package"><span class="name">works</span><br>
+        <span class="note">Each work is one base and its found words, drawn from the real search records &mdash; every hash shown was actually found.</span></div>
+      <div class="package"><span class="name">display</span><br>
+        <span class="note">16:9 plates that scale to the window. A work runs its grind, pauses on the final state, and repeats.</span></div>
+      <div class="package"><span class="name">config</span><br>
+        <span class="note">Move the mouse to reveal Config: timing, layout, hash display, colour encoding, and colour scheme. Save SVG exports the display&rsquo;s exact bytes.</span></div>
+    </div>
+  </footer>
+
+</main>
+
+<script>
+(function () {
+  const page = document.querySelector(".plate-page");
+  function fit() {
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    page.style.transform = "scale(" + s + ")";
+    page.style.left = (innerWidth - 1920 * s) / 2 + "px";
+    page.style.top = (innerHeight - 1080 * s) / 2 + "px";
+  }
+  addEventListener("resize", fit);
+  fit();
+})();
+</script>
+
+</body>
+</html>

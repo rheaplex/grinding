@@ -1,0 +1,309 @@
+:root {
+  --ground: #ffffff;
+  --ink: #16161a;
+  --dim: #56544d;
+  --rule-soft: #e4e2dc;
+  --grid: #d5d2cb;
+  --magic: #d0281e;
+  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* ---- colour schemes: black-on-white is :root; the page sets a body class
+   and both the chrome and the drawing read these variables ---- */
+
+body.scheme-night {
+  --ground: #000000;
+  --ink: #ffffff;
+  --dim: #9a9891;
+  --rule-soft: #232326;
+  --grid: #3c3c42;
+  --magic: #ff3b30;
+}
+
+body.scheme-video {
+  --ground: #000000;
+  --ink: #33ff33;
+  --dim: #22aa22;
+  --rule-soft: #123f12;
+  --grid: #1c661c;
+  --magic: #ff3b30;
+}
+
+body.scheme-inverse {
+  --ground: #33ff33;
+  --ink: #000000;
+  --dim: #0d660d;
+  --rule-soft: #29cc29;
+  --grid: #1fb31f;
+  --magic: #d0281e;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--magic); }
+a:hover { color: var(--magic); }
+
+/* a fixed 16:9 composition, scaled to the window by app.js */
+.plate-page {
+  position: absolute;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  padding: 56px 72px;
+  display: flex;
+  flex-direction: column;
+}
+
+.micro {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+.mono { font-family: var(--mono); letter-spacing: 0; }
+.dim { color: var(--dim); }
+.link { color: var(--magic); }
+.link:hover { color: var(--ink); }
+
+/* ---- title block ---- */
+
+.titleblock {
+  display: grid;
+  grid-template-columns: 176px 1fr auto;
+  gap: 0 32px;
+  padding: 0 0 28px;
+  border-bottom: 1px solid var(--ink);
+}
+
+/* the kicker's last line shares the headline's baseline */
+.titleblock .kicker { grid-row: 1; align-self: last baseline; }
+
+.titleblock h1 {
+  grid-row: 1;
+  align-self: last baseline;
+  margin: 0;
+  font-size: 84px;
+  line-height: 0.9;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+.titleblock-actions { grid-row: 1; grid-column: 3; align-self: start; text-align: right; }
+
+/* the config button shows at startup and on activity, then fades away */
+#config-open { transition: opacity 1s ease; }
+#config-open.faded { opacity: 0; pointer-events: none; }
+
+.worktitle { font-weight: 700; font-style: italic; }
+
+/* ---- index: the list of works ---- */
+
+.works {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+a.work {
+  display: grid;
+  grid-template-columns: 176px 1fr auto;
+  gap: 32px;
+  align-items: baseline;
+  padding: 34px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.work-title {
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+a.work:hover .work-title { color: var(--magic); }
+
+.work-note { text-align: right; }
+
+/* ---- colophon ---- */
+
+.colophon {
+  border-top: 1px solid var(--ink);
+  padding-top: 20px;
+  margin-top: 28px;
+}
+
+.packages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.package { font-size: 12px; line-height: 1.6; }
+.package .name { font-family: var(--mono); }
+.package .note { color: var(--dim); }
+
+/* ---- config dialog ---- */
+
+dialog#config {
+  border: 1px solid var(--ink);
+  padding: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
+
+.config-box {
+  width: 480px;
+  max-width: 90vw;
+  padding: 26px 30px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.config-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 8px;
+}
+
+.config-section { display: flex; flex-direction: column; gap: 10px; }
+
+.config-row { display: flex; gap: 18px; align-items: baseline; }
+
+.note { font-size: 12px; color: var(--dim); line-height: 1.5; }
+
+#duration, #pause {
+  font-family: var(--mono);
+  font-size: 16px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 6px 10px;
+  width: 90px;
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.opt-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.opt-buttons button {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  border: 1px solid var(--ink);
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.opt-buttons button.active {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+/* ---- stage ---- */
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr; /* telemetry hidden; was: 1fr 300px */
+  gap: 40px;
+  padding-top: 32px;
+}
+
+.host {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.host svg { width: 100%; height: 100%; display: block; }
+
+/* ---- telemetry ---- */
+
+.telemetry { display: flex; flex-direction: column; }
+
+.telemetry .head {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 8px;
+}
+
+.trow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 12px 0;
+}
+
+.trow:last-of-type { border-bottom: 1px solid var(--ink); }
+
+.trow .label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.trow .value { font-family: var(--mono); font-size: 18px; }
+.trow .value.small { font-size: 13px; }
+.trow .value .u { color: var(--grid); }
+
+.totals { display: flex; flex-direction: column; gap: 10px; padding-top: 22px; }
+
+.totals .head-small {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.totals .row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.totals .row span:first-child { color: var(--dim); }
+.totals .row span:last-child { font-family: var(--mono); }
+
+#status {
+  margin-top: 22px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--magic);
+}
+
+#status.done { color: var(--ink); }
