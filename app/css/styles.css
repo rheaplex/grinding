@@ -5,6 +5,7 @@
   --rule-soft: #e4e2dc;
   --grid: #d5d2cb;
   --magic: #d0281e;
+  --magic-weight: 400; /* video schemes mark significance with weight, not red */
   --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, Menlo, Consolas, monospace;
 }
@@ -27,7 +28,8 @@ body.scheme-video {
   --dim: #22aa22;
   --rule-soft: #123f12;
   --grid: #1c661c;
-  --magic: #ff3b30;
+  --magic: #7fff7f;
+  --magic-weight: 700;
 }
 
 body.scheme-inverse {
@@ -36,7 +38,8 @@ body.scheme-inverse {
   --dim: #0d660d;
   --rule-soft: #29cc29;
   --grid: #1fb31f;
-  --magic: #d0281e;
+  --magic: #000000;
+  --magic-weight: 700;
 }
 
 * { box-sizing: border-box; }
@@ -84,7 +87,7 @@ a:hover { color: var(--magic); }
 
 .mono { font-family: var(--mono); letter-spacing: 0; }
 .dim { color: var(--dim); }
-.link { color: var(--magic); }
+.link { color: var(--magic); font-weight: var(--magic-weight); }
 .link:hover { color: var(--ink); }
 
 /* ---- title block ---- */
@@ -227,6 +230,11 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
 .opt-buttons button.active {
   background: var(--ink);
   color: var(--ground);
+}
+
+.opt-buttons button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* ---- stage ---- */

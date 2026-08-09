@@ -14,7 +14,10 @@
   function currentTheme() {
     const cs = getComputedStyle(document.body);
     const v = name => cs.getPropertyValue(name).trim();
-    return { ground: v("--ground"), ink: v("--ink"), grid: v("--grid"), ruleSoft: v("--rule-soft"), magic: v("--magic") };
+    return {
+      ground: v("--ground"), ink: v("--ink"), grid: v("--grid"), ruleSoft: v("--rule-soft"),
+      magic: v("--magic"), magicWeight: v("--magic-weight") || "400"
+    };
   }
 
   const encodingOrder = ["rgb12", "grey4", "duo8"];
@@ -23,11 +26,48 @@
   const host = $("host");
   const fmt = n => n.toLocaleString("en-US");
 
-  const state = { layout: "gutter", encoding: "rgb12", display: "squares", scheme: "paper", drawSeconds: 30, pauseSeconds: 7, rowPauseSeconds: 2, running: false };
+  // ---- defaults & tuning --------------------------------------------------
+  const DEFAULTS = {
+    layout: "gutter", encoding: "rgb12", display: "squares", sizing: "fit",
+    scheme: "paper", drawSeconds: 30, pauseSeconds: 7, rowPauseSeconds: 2
+  };
+  const DISPLAYS = [["squares", "squares"], ["circles", "circles"], ["hex", "hex"], ["ascii", "ascii text"]];
+  const SIZINGS = [["fit", "fitted"], ["shrink", "shrink"], ["fill", "grow"], ["overlap", "overlap"]];
+  const FAN_LAYOUTS = ["radial", "rosette", "spiral"]; // element sizing applies here...
+  const BLOCK_DISPLAYS = ["squares", "circles"];       // ...in these displays
+  const CONFIG_FADE_MS = 10000;    // the config button fades after this much quiet
+  const DARK_CHANNEL_FLOOR = 48;   // colour floor on black grounds
+  const DARK_SCHEMES = ["night", "video"];
+
+  const state = { ...DEFAULTS, running: false };
+
+  // ---- url configuration --------------------------------------------------
+  // any config option can be set with query parameters, e.g.
+  //   ?layout=rosette&display=circles&size=shrink&scheme=video
+  //   &encoding=grey4&duration=20&pause=0&rowpause=1&save=final
+  // save=final downloads the finished state once loaded; save=<frame>
+  // downloads that frame instead.
+  const params = new URLSearchParams(location.search);
+  const pick = (key, allowed) => {
+    const v = params.get(key);
+    return v !== null && allowed.includes(v) ? v : null;
+  };
+  const pickNumber = key => {
+    const v = Number(params.get(key));
+    return params.has(key) && Number.isFinite(v) && v >= 0 ? v : null;
+  };
+  state.layout = pick("layout", R.layout.layoutNames) ?? state.layout;
+  state.display = pick("display", DISPLAYS.map(d => d[0])) ?? state.display;
+  state.sizing = pick("size", SIZINGS.map(s => s[0])) ?? state.sizing;
+  state.encoding = pick("encoding", encodingOrder) ?? state.encoding;
+  state.scheme = pick("scheme", schemeOrder.map(s => s[0])) ?? state.scheme;
+  state.drawSeconds = pickNumber("duration") ?? state.drawSeconds;
+  state.pauseSeconds = pickNumber("pause") ?? state.pauseSeconds;
+  state.rowPauseSeconds = pickNumber("rowpause") ?? state.rowPauseSeconds;
+  document.body.className = "scheme-" + state.scheme;
 
   // black grounds raise the colour floor so zero bytes don't vanish
-  const darkSchemes = ["night", "video"];
-  const channelFloor = () => darkSchemes.includes(state.scheme) ? 48 : undefined;
+  const channelFloor = () => DARK_SCHEMES.includes(state.scheme) ? DARK_CHANNEL_FLOOR : undefined;
   let piece = null, view = null, painted = 0, frame = 0;
   let timer = null, startFrame = 0, t0 = 0;
 
@@ -51,8 +91,12 @@
     optButton(encodingBar, key, R.colour.encodings[key].label, () => { state.encoding = key; rebuild(); });
 
   const displayBar = $("display-buttons");
-  for (const [key, label] of [["squares", "squares"], ["circles", "circles"], ["hex", "hex"], ["ascii", "ascii text"]])
+  for (const [key, label] of DISPLAYS)
     optButton(displayBar, key, label, () => { state.display = key; rebuild(); });
+
+  const sizingBar = $("sizing-buttons");
+  for (const [key, label] of SIZINGS)
+    optButton(sizingBar, key, label, () => { state.sizing = key; rebuild(); });
 
   const schemeBar = $("scheme-buttons");
   for (const [key, label] of schemeOrder)
@@ -66,6 +110,13 @@
     [...layoutBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.layout));
     [...encodingBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.encoding));
     [...displayBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.display));
+    // element size only means something where the geometry fans out
+    const sizingApplies = FAN_LAYOUTS.includes(state.layout)
+      && BLOCK_DISPLAYS.includes(state.display);
+    [...sizingBar.children].forEach(b => {
+      b.classList.toggle("active", b.dataset.key === state.sizing);
+      b.disabled = !sizingApplies;
+    });
     [...schemeBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.scheme));
     $("cell-count").textContent = piece ? (piece.textual ? piece.glyphs : piece.cols) : "—";
   }
@@ -76,7 +127,7 @@
   function wakeConfig() {
     configBtn.classList.remove("faded");
     clearTimeout(configHideTimer);
-    configHideTimer = setTimeout(() => configBtn.classList.add("faded"), 10000);
+    configHideTimer = setTimeout(() => configBtn.classList.add("faded"), CONFIG_FADE_MS);
   }
   addEventListener("mousemove", wakeConfig);
   addEventListener("touchstart", wakeConfig, { passive: true });
@@ -118,6 +169,7 @@
     stop();
     piece = R.artwork.build({
       layout: state.layout, encoding: state.encoding, display: state.display,
+      sizing: state.sizing,
       drawSeconds: state.drawSeconds, holdSeconds: state.pauseSeconds,
       rowPauseSeconds: state.rowPauseSeconds, channelFloor: channelFloor()
     });
@@ -244,4 +296,9 @@
   put("total-hashes", fmt(totals.attempts));
 
   rebuild();
+
+  // ?save=final (or a frame number) downloads that state once loaded
+  const saveParam = params.get("save");
+  if (saveParam === "final") save(piece.finalFrame, "final");
+  else if (saveParam && /^\d+$/.test(saveParam)) save(Number(saveParam), "frame-" + saveParam.padStart(4, "0"));
 })();

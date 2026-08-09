@@ -8,6 +8,7 @@
   const defaults = {
     layout: "gutter", encoding: "rgb12", easing: "inOutCubic",
     display: "squares", // squares | circles | hex | ascii
+    sizing: "fit", // fit | fill | overlap — element size on the fanning layouts
     channelFloor: undefined, // raise for dark grounds so zero bytes stay visible
     timeScale: 1, holdSeconds: 7, drawSeconds: null, // null = data-driven; 0 = still
     rowPauseSeconds: 2, // rest between rows (not after the last); 0 = none
@@ -91,7 +92,8 @@
       : (base ? { plaintext: base, nonce: "0" } : null);
     const model = layout.build(o.layout, searches.length, cols, {
       gap: o.cellGap, decorations: o.decorations, header, display, glyphs,
-      labels: o.labels === null ? o.layout === "gutter" : o.labels
+      sizing: o.sizing,
+      labels: o.labels === null ? true : o.labels
     });
     if (model.header && base) {
       const preimageHex = [...base].map(c => c.charCodeAt(0).toString(16).padStart(2, "0")).join("") + "0".repeat(16);
@@ -137,6 +139,7 @@
       magic: art.searches.map((s, i) =>
         (ph.done || i < ph.locked) ? art.magic[i] : (live && i === ph.current ? live.magic : 0)),
       activeRow: ph.done ? -1 : ph.current,
+      resting: !!ph.resting,
       liveNonce: ph.nonce
     };
   }
