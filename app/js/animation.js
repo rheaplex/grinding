@@ -25,10 +25,12 @@
     const slowest = Math.max(...steps.map(work));
     let durations = steps.map(s => (baseMs + spanMs * compress(work(s) / slowest)) / timeScale);
     // a rest after each row's final step — not after the last row — plus a
-    // lead-in rest on the initial value before the first row begins
+    // two-part lead-in: a rest with everything pending, then the initial
+    // value appears and rests before the first row begins
     const pauses = steps.map((s, i) =>
       rowPauseMs && steps[i + 1] && steps[i + 1].row !== s.row ? rowPauseMs : 0);
-    const lead = rowPauseMs;
+    const headerAt = rowPauseMs;
+    const lead = rowPauseMs * 2;
     const pauseTotal = lead + pauses.reduce((a, p) => a + p, 0);
     const workTotal = durations.reduce((a, d) => a + d, 0);
     // an explicit drawing time rescales the grind so the whole drawing
@@ -40,7 +42,7 @@
     const starts = [];
     let t = lead;
     durations.forEach((d, i) => { starts.push(t); t += d + pauses[i]; });
-    return { durations, starts, pauses, lead, gridEnd: t, total: t + holdMs, holdMs };
+    return { durations, starts, pauses, lead, headerAt, gridEnd: t, total: t + holdMs, holdMs };
   }
 
   function phaseAt(clockMs, steps, sched, opts = {}) {
@@ -50,12 +52,14 @@
     const last = steps.length - 1;
     const rows = steps[last].row + 1;
     if (t >= sched.gridEnd) {
-      return { t, locked: rows, current: -1, stepIndex: -1, achieved: -1, nonce: steps[last].nonce, step: 0, seed: 0, done: true };
+      return { t, locked: rows, current: -1, stepIndex: -1, achieved: -1, nonce: steps[last].nonce, step: 0, seed: 0, done: true, header: true };
     }
-    // the lead-in rest: only the initial value shows, every row pending
+    // the lead-in rests: first everything greyed out, every row pending,
+    // then the initial value appears and holds before the first row begins
     if (t < sched.starts[0]) {
       return {
         t, stepIndex: -1, locked: 0, current: -2, resting: true,
+        header: t >= (sched.headerAt || 0),
         achieved: 0, targetChars: 0, nonce: 0, step: 0, seed: 0, done: false
       };
     }
@@ -66,7 +70,7 @@
     if (t - sched.starts[s] >= sched.durations[s]) {
       return {
         t, stepIndex: s, locked: st.row + 1, current: st.row, resting: true,
-        achieved: st.matchedChars, targetChars: st.matchedChars,
+        header: true, achieved: st.matchedChars, targetChars: st.matchedChars,
         nonce: st.nonce, step: 0, seed: 0, done: false
       };
     }
@@ -77,7 +81,7 @@
     const from = st.prevNonce || 0, span = st.nonce - from;
     const nonce = Math.round(from + span * e);
     return {
-      t, stepIndex: s, locked: st.row, current: st.row,
+      t, stepIndex: s, locked: st.row, current: st.row, header: true,
       achieved: st.achievedChars, targetChars: st.matchedChars, nonce,
       step: Math.max(1, Math.round(span * (e - ePrev))),
       seed: (Math.floor(nonce / churnEvery) % 2147483647) + s * 7919,
@@ -87,7 +91,7 @@
 
   const finalPhase = (steps, sched) => ({
     t: sched.gridEnd, locked: steps[steps.length - 1].row + 1, current: -1, stepIndex: -1, achieved: -1,
-    nonce: steps[steps.length - 1].nonce, step: 0, seed: 0, done: true
+    nonce: steps[steps.length - 1].nonce, step: 0, seed: 0, done: true, header: true
   });
 
   // ---- frame addressing: the whole piece as a function of an integer ----

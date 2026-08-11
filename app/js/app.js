@@ -197,6 +197,7 @@
 
   function paintFrame(f) {
     const ph = R.artwork.phaseAtFrame(piece, f);
+    view.setHeader(ph.header !== false);
     if (ph.locked < painted) {
       for (let i = 0; i < piece.searches.length; i++) view.clearRow(i);
       painted = 0;

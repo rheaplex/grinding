@@ -97,8 +97,15 @@
     });
     if (model.header && base) {
       const preimageHex = [...base].map(c => c.charCodeAt(0).toString(16).padStart(2, "0")).join("") + "0".repeat(16);
-      if (model.header.text) model.headerText = hashText(preimageHex, display);
-      else model.headerColours = colour.cellsFromHash(preimageHex, o.encoding, o.channelFloor);
+      // the base word is the header's match: its cells/characters take the
+      // same highlight marking a matched prefix gets on the search rows
+      if (model.header.text) {
+        model.headerText = hashText(preimageHex, display);
+        model.headerMagic = display === "ascii" ? base.length : base.length * 2;
+      } else {
+        model.headerColours = colour.cellsFromHash(preimageHex, o.encoding, o.channelFloor);
+        model.headerMagic = Math.ceil(base.length * 2 / enc.nibblesPerCell);
+      }
     }
     const steps = flattenSteps(searches);
     const sched = animation.schedule(steps, {
@@ -140,6 +147,7 @@
         (ph.done || i < ph.locked) ? art.magic[i] : (live && i === ph.current ? live.magic : 0)),
       activeRow: ph.done ? -1 : ph.current,
       resting: !!ph.resting,
+      header: ph.header !== false,
       liveNonce: ph.nonce
     };
   }
