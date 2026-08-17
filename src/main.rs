@@ -24,6 +24,11 @@ const ITERS: u32 = 64;
 // THREADS*BLOCKS*ITERS launches — so early milestones (t, th, the, …) are seen
 // instead of being skipped inside one huge first launch.
 const RAMP_MAX: u64 = 1 << 20;
+/// Spiral's launch window. One launch reports a single best, so this is also the
+/// resolution of a spiral's collection: hits closer together than this are sampled
+/// rather than enumerated. A multiple of THREADS, so `launch_sized` covers exactly
+/// the window asked for and consecutive windows never overlap.
+const SPIRAL_WINDOW: u64 = 1 << 20;
 const DEFAULT_CONFIG: &str = "tasks.toml";
 
 fn hex(bytes: &[u8]) -> String {
@@ -578,6 +583,68 @@ fn search_target(
     Ok(climb)
 }
 
+/// The nonce windows a spiral grinds: `(start, len)` pairs tiling `[0, budget)` in
+/// `window`-sized steps with the last one clamped. Lazy, because a 64-bit budget is
+/// 2^44 windows.
+fn fixed_windows(budget: u64, window: u64) -> impl Iterator<Item = (u64, u64)> {
+    let mut start = 0u64;
+    std::iter::from_fn(move || {
+        if start >= budget {
+            return None;
+        }
+        let len = window.min(budget - start);
+        let w = (start, len);
+        start += len;
+        Some(w)
+    })
+}
+
+/// Spiral's grind: walk the whole budget in fixed windows, handing every window
+/// whose best is a full match to `on_hit`, and returning the climb of best-so-far
+/// improvements for the partial-match rows. Unlike `search_target` this never exits
+/// early — collecting the repeats is the whole point.
+///
+/// One launch reports one best, so at most one hit per window is seen; for a target
+/// short enough that hits are denser than one per `SPIRAL_WINDOW` nonces the result
+/// is a sample rather than an enumeration.
+#[allow(dead_code)] // wired into the run loop in the next commit
+fn search_all(
+    eng: &Engine,
+    d_template: &CudaSlice<u32>,
+    nonce_off: u32,
+    target_bits: &[u32; 8],
+    care_bits: &[u32; 8],
+    num_bits: u32,
+    num_positions: u32,
+    mut on_hit: impl FnMut((u32, u32, u64)) -> Result<(), Box<dyn std::error::Error>>,
+) -> Result<Vec<(u32, u32, u64)>, Box<dyn std::error::Error>> {
+    let d_target = eng.dev.htod_copy(target_bits.to_vec())?;
+    let d_care = eng.dev.htod_copy(care_bits.to_vec())?;
+    let mut best = (0u32, 0u32, 0u64);
+    let mut climb: Vec<(u32, u32, u64)> = Vec::new();
+    let mut last_hit: Option<u64> = None;
+    for (start, len) in fixed_windows(eng.budget, SPIRAL_WINDOW) {
+        let (res, _) = eng.launch_sized(
+            d_template, nonce_off, &d_target, &d_care, num_bits, num_positions, start, len,
+        )?;
+        // A full match: report it, unless the final short window's rounding-up
+        // handed us the same nonce a second time.
+        if res.0 == num_bits && last_hit != Some(res.2) {
+            last_hit = Some(res.2);
+            on_hit(res)?;
+        }
+        let merged = better(best, res);
+        if merged != best {
+            best = merged;
+            climb.push(best);
+        }
+    }
+    if climb.is_empty() {
+        climb.push(best);
+    }
+    Ok(climb)
+}
+
 /// Record a search's climb: one milestone row each time a new whole character is
 /// matched, plus a final row for the exact best. So a long grind logs
 /// `t -> th -> the -> "the " -> "the f"` instead of just the final partial.
@@ -881,6 +948,47 @@ mod tests {
         expect.update(nonce.to_le_bytes());
         let expect: [u8; 32] = expect.finalize().into();
         assert_eq!(cpu_digest(&setup, nonce), expect);
+    }
+
+    /// Spiral walks fixed windows so hits stay distinguishable: one launch reports
+    /// one best, so the window size is the collection's resolution.
+    #[test]
+    fn fixed_windows_tile_the_budget_exactly() {
+        let w: Vec<_> = fixed_windows(1000, 400).collect();
+        assert_eq!(w, [(0, 400), (400, 400), (800, 200)]); // last one clamped
+        assert_eq!(w.iter().map(|&(_, len)| len).sum::<u64>(), 1000);
+    }
+
+    #[test]
+    fn fixed_windows_divide_evenly_without_a_stub() {
+        assert_eq!(fixed_windows(800, 400).collect::<Vec<_>>(), [(0, 400), (400, 400)]);
+    }
+
+    #[test]
+    fn fixed_windows_of_an_empty_budget_yield_nothing() {
+        assert_eq!(fixed_windows(0, 400).count(), 0);
+    }
+
+    /// budget_bits = 64 means a budget of u64::MAX — 2^44 windows — so the schedule
+    /// has to be lazy rather than a Vec.
+    #[test]
+    fn fixed_windows_is_lazy_enough_for_the_whole_nonce_space() {
+        let first: Vec<_> = fixed_windows(u64::MAX, SPIRAL_WINDOW).take(3).collect();
+        assert_eq!(
+            first,
+            [
+                (0, SPIRAL_WINDOW),
+                (SPIRAL_WINDOW, SPIRAL_WINDOW),
+                (2 * SPIRAL_WINDOW, SPIRAL_WINDOW)
+            ]
+        );
+    }
+
+    /// The window has to divide the launch geometry, or `launch_sized` would round
+    /// up, overlap the next window, and report the same nonce twice.
+    #[test]
+    fn spiral_window_divides_the_launch_geometry() {
+        assert_eq!(SPIRAL_WINDOW % THREADS as u64, 0);
     }
 
     /// Build the first task of a config, surfacing parse and validation errors
