@@ -123,9 +123,9 @@ logging a row per nonce whose digest yields the target. It therefore ignores
 and spiral wants all of them.
 
 The kernel returns one packed best per launch, so **spiral resolves at most one
-hit per launch window**. It uses fixed windows of `RAMP_MAX` (2^20) nonces across
-the whole budget rather than the ramp-to-full-size schedule, keeping the window
-small enough that closely spaced hits are still distinguished. For a target short
+hit per launch window**. It uses fixed windows of `SPIRAL_WINDOW` (2^20) nonces
+across the whole budget rather than the ramp-to-full-size schedule, keeping the
+window small enough that closely spaced hits are still distinguished. For a target short
 enough that hits are denser than one per 2^20 nonces, the collected set is a
 sample, not an enumeration. Making it exhaustive would mean a kernel that returns
 a hit list instead of a single best, which is out of scope here.
@@ -188,11 +188,15 @@ struct Task {
     edges: Vec<(String, String)>, // derived at build time
     source_mode: SourceMode,
     encoding: Encoding,           // carries the case flag as `ci`
-    case: CaseMode,               // effective value, for the CSV
+    case: CaseMode,               // as written or defaulted
     position: PositionMode,
     match_mode: MatchMode,
 }
 ```
+
+`case` holds what the task asked for, not what it got — the warning above needs to
+know the difference. `Task::effective_case()` derives what the comparison actually
+did, and that is what the CSV records.
 
 `Task` no longer holds a single `setup`, since the preimage prefix now varies per
 edge. It gains `fn setup_for(&self, from: &str) -> Vec<u8>` — the from-word's
@@ -226,8 +230,10 @@ never completes still logs `t → th → the`. This was previously true only of
 `target_mode = "each"` — the collect modes logged one row per target — so
 removing them means partials are now kept everywhere.
 
-`spiral` records milestone rows up to its first full hit, then one row per
-subsequent hit. The existing `full` column distinguishes them.
+`spiral` records a row per hit as each one turns up, then the *partial* milestones
+of its climb — the full-match entry of the climb is dropped, because the hit rows
+already carry it. So a spiral logs each full match exactly once, plus the best
+partial it saw on the way. The existing `full` column distinguishes the two kinds.
 
 ## Run loop
 
