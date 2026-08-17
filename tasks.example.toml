@@ -1,0 +1,78 @@
+# Every topology, once, as a worked example of the vocabulary. Copy to tasks.toml
+# and edit. `topology` and `source_mode` are required; `case`, `position` and
+# `match_mode` default to sensitive / prefix / longest.
+
+[run]
+budget_bits = 32       # nonces per edge = 2^32, counting from zero every time
+csv = "results.csv"
+
+# Each word to the next: to->this, this->that.
+[[task]]
+label       = "chain"
+topology    = "chain"
+words       = ["to", "this", "that"]
+source_mode = "plain"
+encoding    = "ascii8"
+
+# The chain closed back on itself: one->two, two->three, three->one.
+[[task]]
+label       = "ring"
+topology    = "ring"
+to          = "one two three"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+
+# Every word to the hub: a->grinding, b->grinding, c->grinding.
+[[task]]
+label       = "star-to"
+topology    = "star_to"
+hub         = "grinding"
+to          = "a b c"
+source_mode = "plain"
+encoding    = "ascii8"
+
+# The hub to every word: grinding->a, grinding->b, grinding->c.
+[[task]]
+label       = "star-from"
+topology    = "star_from"
+hub         = "grinding"
+to          = "a b c"
+source_mode = "plain"
+encoding    = "ascii8"
+position    = "anywhere"
+
+# Every ordered pair: 6 searches from 3 words. Quadratic — mind the budget.
+[[task]]
+label       = "graph"
+topology    = "graph"
+to          = "red green blue"
+source_mode = "plain"
+encoding    = "ascii8"
+
+# As many nonces as spell the word, not just the first.
+[[task]]
+label       = "spiral"
+topology    = "spiral"
+hub         = "grinding"
+to          = "and"
+source_mode = "plain"
+encoding    = "ascii8"
+
+# A text too long to sit in the preimage: hashed puts SHA256(hub) there instead.
+[[task]]
+label       = "hashed-star"
+topology    = "star_from"
+hub         = "a source string far longer than the 32-byte plain limit allows"
+to          = "x y"
+source_mode = "hashed"
+encoding    = "ascii8"
+
+# Baudot folds case itself, so this warns that case = "sensitive" (the default)
+# has no effect. Saying case = "insensitive" silences it.
+[[task]]
+label       = "baudot-ring"
+topology    = "ring"
+to          = "one two"
+source_mode = "plain"
+encoding    = "baudot"
