@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 mod baudot;
 mod tnsy;
+mod topology;
 
 // Compiled at runtime via NVRTC. Path is relative to this source file.
 const KERNEL_SRC: &str = include_str!("../cuda/sha256_search.cu");
