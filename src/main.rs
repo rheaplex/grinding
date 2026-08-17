@@ -10,13 +10,16 @@ mod baudot;
 mod tnsy;
 mod topology;
 
+use topology::Topology;
+
 // Compiled at runtime via NVRTC. Path is relative to this source file.
 const KERNEL_SRC: &str = include_str!("../cuda/sha256_search.cu");
 
 // --- Launch shape ------------------------------------------------------------
 // One launch covers THREADS * BLOCKS * ITERS nonces. Tune for ~tens of ms per
-// launch so the live progress readout updates smoothly. (The nonce budget, CSV
-// path, and the tasks themselves live in tasks.toml — see Config below.)
+// launch so the live progress readout updates smoothly. (The nonce budget — spent
+// in full on every edge, counting from zero — the CSV path, and the tasks
+// themselves live in tasks.toml. See Config below.)
 const THREADS: u32 = 256;
 const BLOCKS: u32 = 2048;
 const ITERS: u32 = 64;
@@ -106,39 +109,6 @@ impl MatchMode {
     }
 }
 
-/// How a task's multiple targets relate to each other.
-#[derive(Clone, Copy, Debug)]
-enum TargetMode {
-    /// Each target is its own independent search (one row each), per `match_mode`.
-    Each,
-    /// Collect every target (full match) off one base grind, in list sequence;
-    /// stop the chain if a word isn't found within budget.
-    CollectInOrder,
-    /// Collect every target (full match) off one base grind; each nonce window
-    /// hunts all the not-yet-found words and stores whichever turns up first.
-    CollectAnyOrder,
-}
-
-impl TargetMode {
-    fn slug(self) -> &'static str {
-        match self {
-            TargetMode::Each => "each",
-            TargetMode::CollectInOrder => "collect_in_order",
-            TargetMode::CollectAnyOrder => "collect_any_order",
-        }
-    }
-    fn from_slug(s: &str) -> Result<Self, String> {
-        match s {
-            "each" => Ok(TargetMode::Each),
-            "collect_in_order" => Ok(TargetMode::CollectInOrder),
-            "collect_any_order" => Ok(TargetMode::CollectAnyOrder),
-            other => Err(format!(
-                "unknown target_mode {other:?} (want each|collect_in_order|collect_any_order)"
-            )),
-        }
-    }
-}
-
 /// Longest `base` allowed in `SourceMode::Plain` — the same 32 bytes a `Hashed`
 /// digest occupies, so either way the preimage is at most 32 + 8 = 40 bytes.
 const PLAIN_MAX: usize = 32;
@@ -183,20 +153,32 @@ impl SourceMode {
     }
 }
 
-/// A fan-out search: grind `setup ‖ nonce` looking for `targets`. `setup` is
-/// either the plaintext `base` itself (`Plain`) or `SHA256(base)` (`Hashed`),
-/// per the task's `source_mode`. Built from a `TaskConfig`.
+/// A task's searches: `topology` draws `edges` over `words` (and `hub`, where the
+/// shape has one), and each edge is one independent grind of `from ‖ nonce` looking
+/// for `to`. Built from a `TaskConfig`.
 #[derive(Debug)]
 struct Task {
     label: String,
-    base: String,
+    topology: Topology,
+    hub: Option<String>,          // None for the hubless shapes; kept for --list
+    words: Vec<String>,           // kept for --list; `edges` is what runs
+    edges: Vec<(String, String)>, // (from, to), in the topology's order
     source_mode: SourceMode,
-    setup: Vec<u8>, // the fixed prefix the nonce is hashed into: base bytes, or SHA256(base)
-    targets: Vec<String>,
     encoding: Encoding,
     position: PositionMode,
-    match_mode: MatchMode, // applies to TargetMode::Each (collect modes are always full)
-    target_mode: TargetMode,
+    match_mode: MatchMode, // ignored by Spiral, which wants every hit
+}
+
+impl Task {
+    /// The fixed preimage prefix for one edge: the from-word's bytes under `plain`,
+    /// `SHA256(from)` under `hashed`. `build` has already checked the plain length
+    /// limit for every from-word, so this cannot overflow the block.
+    fn setup_for(&self, from: &str) -> Vec<u8> {
+        match self.source_mode {
+            SourceMode::Plain => from.as_bytes().to_vec(),
+            SourceMode::Hashed => setup_hash(from.as_bytes()).to_vec(),
+        }
+    }
 }
 
 impl Encoding {
@@ -417,8 +399,8 @@ struct CsvLog {
 }
 
 impl CsvLog {
-    const HEADER: &'static str = "unix_time,task,base,source_mode,encoding,target,encoded_text,\
-position_mode,match_mode,target_mode,matched_chars,total_chars,matched_bits,target_bits,\
+    const HEADER: &'static str = "unix_time,task,topology,base,source_mode,encoding,target,\
+encoded_text,position_mode,match_mode,matched_chars,total_chars,matched_bits,target_bits,\
 match_pos,full,prefix,nonce,nonce_hex,digest";
 
     fn open(path: &str) -> std::io::Result<Self> {
@@ -607,7 +589,6 @@ fn fixed_windows(budget: u64, window: u64) -> impl Iterator<Item = (u64, u64)> {
 /// One launch reports one best, so at most one hit per window is seen; for a target
 /// short enough that hits are denser than one per `SPIRAL_WINDOW` nonces the result
 /// is a sample rather than an enumeration.
-#[allow(dead_code)] // wired into the run loop in the next commit
 fn search_all(
     eng: &Engine,
     d_template: &CudaSlice<u32>,
@@ -651,6 +632,8 @@ fn search_all(
 fn record_milestones(
     csv: &mut CsvLog,
     task: &Task,
+    from: &str,
+    setup: &[u8],
     target: &str,
     target_bits: &[u32; 8],
     care_bits: &[u32; 8],
@@ -664,16 +647,59 @@ fn record_milestones(
         let chars = matched_prefix(task.encoding, target, step.0).0;
         if chars > last_chars || step == final_best {
             last_chars = last_chars.max(chars);
-            record(csv, task, target, target_bits, care_bits, num_bits, num_positions, step)?;
+            record(
+                csv, task, from, setup, target, target_bits, care_bits, num_bits, num_positions,
+                step,
+            )?;
         }
     }
     Ok(())
+}
+
+/// One resolved search as CSV fields, in `CsvLog::HEADER` order. Pure, so the row
+/// layout can be tested without a file: `record` does the verifying and printing.
+fn row_fields(
+    task: &Task,
+    from: &str,
+    setup: &[u8],
+    target: &str,
+    num_bits: u32,
+    best: (u32, u32, u64),
+) -> Vec<String> {
+    let (best_len, best_pos, best_nonce) = best;
+    let digest = cpu_digest(setup, best_nonce);
+    let (chars, prefix) = matched_prefix(task.encoding, target, best_len);
+    let total_chars = target.chars().count();
+    vec![
+        unix_now().to_string(),
+        task.label.to_string(),
+        task.topology.slug().to_string(),
+        from.to_string(),
+        task.source_mode.slug().to_string(),
+        task.encoding.slug(),
+        target.to_string(),
+        normalized_text(task.encoding, target),
+        task.position.slug().to_string(),
+        task.match_mode.slug().to_string(),
+        chars.to_string(),
+        total_chars.to_string(),
+        best_len.to_string(),
+        num_bits.to_string(),
+        best_pos.to_string(),
+        (chars == total_chars).to_string(),
+        prefix,
+        best_nonce.to_string(),
+        format!("0x{:x}", best_nonce),
+        hex(&digest),
+    ]
 }
 
 /// Decode, CPU-verify, print, and append a CSV row for one resolved search.
 fn record(
     csv: &mut CsvLog,
     task: &Task,
+    from: &str,
+    setup: &[u8],
     target: &str,
     target_bits: &[u32; 8],
     care_bits: &[u32; 8],
@@ -682,18 +708,19 @@ fn record(
     best: (u32, u32, u64),
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (best_len, best_pos, best_nonce) = best;
-    let digest = cpu_digest(&task.setup, best_nonce);
-    let (vlen, vpos) = best_match(&digest_words(&digest), target_bits, care_bits, num_bits, num_positions);
+    let digest = cpu_digest(setup, best_nonce);
+    let (vlen, vpos) =
+        best_match(&digest_words(&digest), target_bits, care_bits, num_bits, num_positions);
     let verified = vlen == best_len && (best_len == 0 || vpos == best_pos);
 
-    let (chars, prefix) = matched_prefix(task.encoding, target, best_len);
+    let (chars, _) = matched_prefix(task.encoding, target, best_len);
     let total_chars = target.chars().count();
     let full = chars == total_chars;
 
     println!(
-        "[{:<16}] {:?} -> {:<18?} {}/{} {:>2}/{} ch {:>3}/{} bit @pos {:>3} nonce=0x{:x}{}{}",
-        task.target_mode.slug(),
-        task.base,
+        "[{:<9}] {:?} -> {:<18?} {}/{} {:>2}/{} ch {:>3}/{} bit @pos {:>3} nonce=0x{:x}{}{}",
+        task.topology.slug(),
+        from,
         target,
         task.position.slug(),
         task.match_mode.slug(),
@@ -707,34 +734,14 @@ fn record(
         if verified { "" } else { "  [VERIFY MISMATCH]" },
     );
 
-    csv.row(&[
-        unix_now().to_string(),
-        task.label.to_string(),
-        task.base.to_string(),
-        task.source_mode.slug().to_string(),
-        task.encoding.slug(),
-        target.to_string(),
-        normalized_text(task.encoding, target),
-        task.position.slug().to_string(),
-        task.match_mode.slug().to_string(),
-        task.target_mode.slug().to_string(),
-        chars.to_string(),
-        total_chars.to_string(),
-        best_len.to_string(),
-        num_bits.to_string(),
-        best_pos.to_string(),
-        full.to_string(),
-        prefix,
-        best_nonce.to_string(),
-        format!("0x{:x}", best_nonce),
-        hex(&digest),
-    ])?;
+    csv.row(&row_fields(task, from, setup, target, num_bits, best))?;
     Ok(())
 }
 
 // =====================================================================
-// Config: tasks.toml -> Vec<Task>. Optional per-task fields default to
-// prefix / longest / each. Run-level knobs live under [run].
+// Config: tasks.toml -> Vec<Task>. `topology` and `source_mode` are required and
+// have no default; the rest default to prefix / longest. Run-level knobs live
+// under [run].
 // =====================================================================
 #[derive(Deserialize)]
 struct Config {
@@ -745,7 +752,8 @@ struct Config {
 
 #[derive(Deserialize)]
 struct RunConfig {
-    /// Nonce budget per target = 2^budget_bits.
+    /// Nonce budget per edge = 2^budget_bits. Every edge gets the whole of it,
+    /// counting from zero.
     budget_bits: u32,
     csv: String,
 }
@@ -753,25 +761,31 @@ struct RunConfig {
 #[derive(Deserialize)]
 struct TaskConfig {
     label: String,
-    /// The initial plaintext, hashed as `base ‖ nonce`. `from` is an alias, so a
-    /// task can read naturally as `from = "…"` / `to = "…"`.
-    #[serde(alias = "from")]
-    base: String,
-    /// Explicit target list. Omit when using `to`.
+    /// How the words below turn into searches: `chain|ring|star_to|star_from|
+    /// graph|spiral`. Required, no default — the shape is the point of the task.
+    /// Optional here only so a missing value gets a useful error instead of
+    /// serde's.
+    topology: Option<String>,
+    /// The one word the shape hangs off: the destination for `star_to`, the
+    /// starting point for `star_from` and `spiral`. Required by those three,
+    /// rejected by `chain`, `ring` and `graph`, which draw every edge from the
+    /// word list.
+    hub: Option<String>,
+    /// The words the topology draws its edges over — sources as well as
+    /// destinations under `chain`, `ring` and `graph`. Omit when using `to`.
     #[serde(default)]
-    targets: Vec<String>,
-    /// Shorthand: one string split on whitespace into successive targets, e.g.
-    /// `to = "to this"` -> ["to", "this"]. Mutually exclusive with `targets`;
-    /// implies target_mode = collect_in_order unless one is set explicitly.
+    words: Vec<String>,
+    /// Shorthand: one string split on whitespace into `words`, e.g.
+    /// `to = "to this"` -> ["to", "this"]. Mutually exclusive with `words`.
     to: Option<String>,
-    /// Required, no default: "plain" (cleartext in the preimage, base <= 32
-    /// bytes) or "hashed" (SHA256(base) in the preimage, any length). Optional
-    /// here only so a missing value gets a useful error instead of serde's.
+    /// Required, no default: "plain" (cleartext in the preimage, every from-word
+    /// <= 32 bytes) or "hashed" (SHA256(from) in the preimage, any length).
+    /// Optional here only so a missing value gets a useful error instead of
+    /// serde's.
     source_mode: Option<String>,
     encoding: String,
     position: Option<String>,
     match_mode: Option<String>,
-    target_mode: Option<String>,
 }
 
 /// Parse an optional slug field, falling back to `default` when absent.
@@ -787,25 +801,56 @@ impl TaskConfig {
         let label = self.label.clone();
         let ctx = move |e: String| format!("task {label:?}: {e}");
 
-        // Targets come from an explicit `targets` list or the `to` shorthand
-        // (split on whitespace), but never both. `to` reads as "search for these
-        // words in turn", so it defaults to collect_in_order.
-        let (targets, default_target_mode) = match (self.targets.is_empty(), self.to) {
-            (false, None) => (self.targets, TargetMode::Each),
-            (true, Some(to)) => (
-                to.split_whitespace().map(str::to_string).collect(),
-                TargetMode::CollectInOrder,
-            ),
-            (false, Some(_)) => return Err(ctx("set `targets` or `to`, not both".into())),
-            (true, None) => return Err(ctx("no targets (set `targets` or `to`)".into())),
+        // The shape comes first: it decides whether a hub is wanted and how many
+        // words are enough.
+        let topology = match &self.topology {
+            Some(s) => Topology::from_slug(s).map_err(&ctx)?,
+            None => {
+                return Err(ctx(format!(
+                    "topology is required and has no default — set one of {}",
+                    topology::ALL
+                )));
+            }
         };
-        if targets.is_empty() {
-            return Err(ctx("`to` had no whitespace-separated words".into()));
+
+        // Words come from an explicit list or the `to` shorthand (split on
+        // whitespace), but never both.
+        let words: Vec<String> = match (self.words.is_empty(), self.to) {
+            (false, None) => self.words,
+            (true, Some(to)) => to.split_whitespace().map(str::to_string).collect(),
+            (false, Some(_)) => return Err(ctx("set `words` or `to`, not both".into())),
+            (true, None) => return Err(ctx("no words (set `words` or `to`)".into())),
+        };
+        if words.len() < topology.min_words() {
+            return Err(ctx(format!(
+                "topology {:?} needs at least {} words, got {}",
+                topology.slug(),
+                topology.min_words(),
+                words.len()
+            )));
         }
 
+        // A hub is either the shape's fixed end or meaningless — never carried
+        // along doing nothing.
+        let hub = match (topology.requires_hub(), self.hub) {
+            (true, Some(h)) => Some(h),
+            (true, None) => {
+                return Err(ctx(format!("topology {:?} needs a `hub`", topology.slug())));
+            }
+            (false, Some(_)) => {
+                return Err(ctx(format!(
+                    "topology {:?} draws every edge from `words`; remove `hub`",
+                    topology.slug()
+                )));
+            }
+            (false, None) => None,
+        };
+
+        let edges = topology.edges(&words, hub.as_deref());
+
         // `plain` keeps the cleartext readable in the preimage, so it only works
-        // while base fits beside the nonce in one block; `hashed` lifts that at
-        // the cost of the cleartext. Refuse to silently pick one.
+        // while a from-word fits beside the nonce in one block; `hashed` lifts that
+        // at the cost of the cleartext. Refuse to silently pick one.
         let source_mode = match &self.source_mode {
             Some(s) => SourceMode::from_slug(s).map_err(&ctx)?,
             None => {
@@ -815,28 +860,31 @@ impl TaskConfig {
                 )));
             }
         };
-        let setup = match source_mode {
-            SourceMode::Plain if self.base.len() > PLAIN_MAX => {
-                return Err(ctx(format!(
-                    "source_mode = \"plain\" needs base <= {PLAIN_MAX} bytes, got {}; \
-                     use source_mode = \"hashed\" for longer text",
-                    self.base.len()
-                )));
+        if source_mode == SourceMode::Plain {
+            // Every from-word becomes a preimage prefix, so every one has to fit.
+            for (from, _) in &edges {
+                if from.len() > PLAIN_MAX {
+                    return Err(ctx(format!(
+                        "source_mode = \"plain\" needs every from-word <= {PLAIN_MAX} bytes, \
+                         but {from:?} is {}; use source_mode = \"hashed\" for longer text",
+                        from.len()
+                    )));
+                }
             }
-            SourceMode::Plain => self.base.as_bytes().to_vec(),
-            SourceMode::Hashed => setup_hash(self.base.as_bytes()).to_vec(),
-        };
+        }
 
         Ok(Task {
             encoding: Encoding::from_slug(&self.encoding).map_err(&ctx)?,
-            position: parse_or(self.position, PositionMode::Prefix, PositionMode::from_slug).map_err(&ctx)?,
-            match_mode: parse_or(self.match_mode, MatchMode::Longest, MatchMode::from_slug).map_err(&ctx)?,
-            target_mode: parse_or(self.target_mode, default_target_mode, TargetMode::from_slug).map_err(&ctx)?,
+            position: parse_or(self.position, PositionMode::Prefix, PositionMode::from_slug)
+                .map_err(&ctx)?,
+            match_mode: parse_or(self.match_mode, MatchMode::Longest, MatchMode::from_slug)
+                .map_err(&ctx)?,
             label: self.label,
+            topology,
+            hub,
+            words,
+            edges,
             source_mode,
-            setup,
-            base: self.base,
-            targets,
         })
     }
 }
@@ -999,66 +1047,213 @@ mod tests {
         cfg.task.into_iter().next().unwrap().build()
     }
 
-    const REST: &str = "to = \"a b\"\nencoding = \"ascii8\"\n";
+    /// The tail most fixtures share: a two-word star, satisfying both the hub
+    /// shapes and the hubless two-word floor without saying anything about case.
+    const REST: &str =
+        "topology = \"star_from\"\nhub = \"hub\"\nto = \"a b\"\nencoding = \"ascii8\"\n";
 
     #[test]
     fn plain_mode_keeps_cleartext_as_the_preimage_prefix() {
-        let t = build_one(&format!(
-            "label = \"p\"\nfrom = \"short enough\"\nsource_mode = \"plain\"\n{REST}"
-        ))
-        .unwrap();
+        let t = build_one(&format!("label = \"p\"\nsource_mode = \"plain\"\n{REST}")).unwrap();
         assert_eq!(t.source_mode, SourceMode::Plain);
-        assert_eq!(t.setup, b"short enough".to_vec()); // literal cleartext, not a digest
+        // literal cleartext, not a digest, and one prefix per from-word
+        assert_eq!(t.setup_for("hub"), b"hub".to_vec());
     }
 
     #[test]
     fn hashed_mode_substitutes_the_digest() {
         let long = "x".repeat(200);
         let t = build_one(&format!(
-            "label = \"h\"\nfrom = \"{long}\"\nsource_mode = \"hashed\"\n{REST}"
+            "label = \"h\"\nsource_mode = \"hashed\"\ntopology = \"star_from\"\n\
+             hub = \"{long}\"\nto = \"a b\"\nencoding = \"ascii8\"\n"
         ))
         .unwrap();
         assert_eq!(t.source_mode, SourceMode::Hashed);
-        assert_eq!(t.setup, Sha256::digest(long.as_bytes()).to_vec());
+        assert_eq!(t.setup_for(&long), Sha256::digest(long.as_bytes()).to_vec());
     }
 
     #[test]
-    fn plain_mode_rejects_overlong_base() {
+    fn plain_mode_rejects_an_overlong_hub() {
         let long = "y".repeat(PLAIN_MAX + 1);
         let err = build_one(&format!(
-            "label = \"p\"\nfrom = \"{long}\"\nsource_mode = \"plain\"\n{REST}"
+            "label = \"p\"\nsource_mode = \"plain\"\ntopology = \"star_from\"\n\
+             hub = \"{long}\"\nto = \"a b\"\nencoding = \"ascii8\"\n"
         ))
         .unwrap_err();
         assert!(err.contains("plain") && err.contains("hashed"), "{err}");
     }
 
+    /// Under chain/ring/graph the list words are from-words too, so the plain limit
+    /// applies to each of them — and the error names the one at fault.
     #[test]
-    fn plain_mode_accepts_base_exactly_at_the_limit() {
-        let at = "z".repeat(PLAIN_MAX);
+    fn plain_mode_rejects_an_overlong_list_word() {
+        let long = "z".repeat(PLAIN_MAX + 1);
+        let err = build_one(&format!(
+            "label = \"c\"\nsource_mode = \"plain\"\ntopology = \"chain\"\n\
+             words = [\"ok\", \"{long}\", \"fine\"]\nencoding = \"ascii8\"\n"
+        ))
+        .unwrap_err();
+        assert!(err.contains(&long), "should name the offending word: {err}");
+        assert!(err.contains("hashed"), "should offer the way out: {err}");
+    }
+
+    /// The last word of a chain is only ever a target, so its length is nobody's
+    /// problem — only from-words become preimage prefixes.
+    #[test]
+    fn plain_mode_allows_an_overlong_final_chain_word() {
+        let long = "z".repeat(PLAIN_MAX + 1);
         let t = build_one(&format!(
-            "label = \"p\"\nfrom = \"{at}\"\nsource_mode = \"plain\"\n{REST}"
+            "label = \"c\"\nsource_mode = \"plain\"\ntopology = \"chain\"\n\
+             words = [\"ok\", \"{long}\"]\nencoding = \"ascii8\"\n"
         ))
         .unwrap();
-        assert_eq!(t.setup.len(), PLAIN_MAX);
+        assert_eq!(t.edges, [("ok".to_string(), long)]);
+    }
+
+    #[test]
+    fn plain_mode_accepts_a_hub_exactly_at_the_limit() {
+        let at = "z".repeat(PLAIN_MAX);
+        let t = build_one(&format!(
+            "label = \"p\"\nsource_mode = \"plain\"\ntopology = \"star_from\"\n\
+             hub = \"{at}\"\nto = \"a b\"\nencoding = \"ascii8\"\n"
+        ))
+        .unwrap();
+        assert_eq!(t.setup_for(&at).len(), PLAIN_MAX);
     }
 
     #[test]
     fn source_mode_must_be_set_and_valid() {
         // Omitted entirely: named as required, and both choices are spelled out
         // so the fix is in the message rather than the docs.
-        let missing = build_one(&format!("label = \"m\"\nfrom = \"hi\"\n{REST}")).unwrap_err();
+        let missing = build_one(&format!("label = \"m\"\n{REST}")).unwrap_err();
         for want in ["source_mode", "required", "no default", "plain", "hashed", "32"] {
             assert!(missing.contains(want), "missing {want:?} from: {missing}");
         }
 
         // A wrong value gets the same guidance, not just a rejection.
-        let bogus = build_one(&format!(
-            "label = \"m\"\nfrom = \"hi\"\nsource_mode = \"neat\"\n{REST}"
-        ))
-        .unwrap_err();
+        let bogus =
+            build_one(&format!("label = \"m\"\nsource_mode = \"neat\"\n{REST}")).unwrap_err();
         for want in ["neat", "plain", "hashed"] {
             assert!(bogus.contains(want), "missing {want:?} from: {bogus}");
         }
+    }
+
+    /// Topology has no default for the same reason source_mode has none: the shape
+    /// is the point of the task, not an implementation detail.
+    #[test]
+    fn topology_must_be_set_and_valid() {
+        let missing = build_one(
+            "label = \"t\"\nsource_mode = \"plain\"\nto = \"a b\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap_err();
+        for want in ["topology", "required", "no default", "chain", "spiral"] {
+            assert!(missing.contains(want), "missing {want:?} from: {missing}");
+        }
+
+        let bogus = build_one(
+            "label = \"t\"\nsource_mode = \"plain\"\ntopology = \"mesh\"\n\
+             to = \"a b\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap_err();
+        for want in ["mesh", "chain", "ring", "star_to", "star_from", "graph", "spiral"] {
+            assert!(bogus.contains(want), "missing {want:?} from: {bogus}");
+        }
+    }
+
+    #[test]
+    fn hub_shapes_demand_a_hub() {
+        let err = build_one(
+            "label = \"s\"\nsource_mode = \"plain\"\ntopology = \"star_to\"\n\
+             to = \"a b\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap_err();
+        assert!(err.contains("\"s\"") && err.contains("hub"), "{err}");
+    }
+
+    /// A hub on a hubless shape would sit there doing nothing, so it is an error
+    /// rather than a silent no-op.
+    #[test]
+    fn hubless_shapes_reject_a_hub() {
+        let err = build_one(
+            "label = \"c\"\nsource_mode = \"plain\"\ntopology = \"chain\"\n\
+             hub = \"h\"\nto = \"a b\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap_err();
+        assert!(err.contains("hub") && err.contains("chain"), "{err}");
+    }
+
+    #[test]
+    fn hubless_shapes_need_two_words() {
+        let err = build_one(
+            "label = \"c\"\nsource_mode = \"plain\"\ntopology = \"ring\"\n\
+             to = \"lonely\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap_err();
+        assert!(err.contains("ring") && err.contains('2'), "{err}");
+    }
+
+    #[test]
+    fn words_and_to_are_mutually_exclusive() {
+        let both = build_one(
+            "label = \"w\"\nsource_mode = \"plain\"\ntopology = \"chain\"\n\
+             words = [\"a\", \"b\"]\nto = \"a b\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap_err();
+        assert!(both.contains("words") && both.contains("to"), "{both}");
+
+        let neither = build_one(
+            "label = \"w\"\nsource_mode = \"plain\"\ntopology = \"chain\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap_err();
+        assert!(neither.contains("words") && neither.contains("to"), "{neither}");
+    }
+
+    /// `to` is the shorthand: one string split on whitespace.
+    #[test]
+    fn to_shorthand_splits_into_words() {
+        let t = build_one(&format!("label = \"w\"\nsource_mode = \"plain\"\n{REST}")).unwrap();
+        assert_eq!(t.words, ["a", "b"]);
+        assert_eq!(
+            t.edges,
+            [("hub".to_string(), "a".to_string()), ("hub".to_string(), "b".to_string())]
+        );
+    }
+
+    /// The edge list is what the run loop iterates, so the config's job is to hand
+    /// it over already drawn.
+    #[test]
+    fn build_derives_the_edge_list_from_the_topology() {
+        let t = build_one(
+            "label = \"g\"\nsource_mode = \"plain\"\ntopology = \"graph\"\n\
+             to = \"a b\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap();
+        assert_eq!(t.topology, Topology::Graph);
+        assert_eq!(t.hub, None);
+        assert_eq!(
+            t.edges,
+            [("a".to_string(), "b".to_string()), ("b".to_string(), "a".to_string())]
+        );
+    }
+
+    /// A row's fields have to line up with the header, and the new column has to
+    /// hold the topology. `base` is the edge's from-word, not a task-wide value.
+    #[test]
+    fn csv_row_matches_the_header() {
+        let t = build_one(&format!("label = \"r\"\nsource_mode = \"plain\"\n{REST}")).unwrap();
+        let (_, _, nb) = encode_target(t.encoding, "a").unwrap();
+        let setup = t.setup_for("hub");
+        let fields = row_fields(&t, "hub", &setup, "a", nb, (nb, 0, 7));
+
+        let head: Vec<&str> = CsvLog::HEADER.split(',').collect();
+        assert_eq!(fields.len(), head.len(), "{head:?} vs {fields:?}");
+        let at = |name: &str| fields[head.iter().position(|h| *h == name).expect(name)].clone();
+        assert_eq!(at("task"), "r");
+        assert_eq!(at("topology"), "star_from");
+        assert_eq!(at("base"), "hub"); // the edge's from-word
+        assert_eq!(at("target"), "a");
+        assert_eq!(at("full"), "true");
+        assert!(!head.contains(&"target_mode"));
     }
 }
 
@@ -1078,18 +1273,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cli.list {
         for t in &tasks {
             println!(
-                "{:<14} {:?} -> {:?}  [{}, {}, {}, {}, {}]",
+                "{:<14} {:<10} hub {:<14} {:?}  {} edges  [{}, {}, {}, {}]",
                 t.label,
-                t.base,
-                t.targets,
+                t.topology.slug(),
+                t.hub.as_deref().unwrap_or("—"),
+                t.words,
+                t.edges.len(),
                 t.source_mode.slug(),
                 t.encoding.slug(),
                 t.position.slug(),
                 t.match_mode.slug(),
-                t.target_mode.slug(),
             );
         }
-        println!("({} tasks, budget 2^{} nonces, csv {})", tasks.len(), budget.trailing_zeros(), csv_path);
+        let searches: usize = tasks.iter().map(|t| t.edges.len()).sum();
+        println!(
+            "({} tasks, {} searches, budget 2^{} nonces each, csv {})",
+            tasks.len(),
+            searches,
+            budget.trailing_zeros(),
+            csv_path
+        );
         return Ok(());
     }
 
@@ -1114,87 +1317,49 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     for task in tasks {
-        let (template, nonce_off) = build_template(&task.setup);
-        let d_template = eng.dev.htod_copy(template.to_vec())?;
         let num_positions = task.position.num_positions();
-        let enc = |t: &str| encode_target(task.encoding, t);
+        for (from, to) in &task.edges {
+            // Each edge is its own search: its own preimage prefix, its own
+            // template, and a nonce counter starting at zero.
+            let setup = task.setup_for(from);
+            let (template, nonce_off) = build_template(&setup);
+            let d_template = eng.dev.htod_copy(template.to_vec())?;
+            let (tb, cb, nb) = encode_target(task.encoding, to)?;
 
-        match task.target_mode {
-            // Each target independent (one row each), per match_mode.
-            TargetMode::Each => {
+            if task.topology == Topology::Spiral {
+                // Every nonce that spells the word, not just the first — so hits
+                // are written as they turn up, and match_mode has nothing to say.
+                let climb = search_all(
+                    &eng,
+                    &d_template,
+                    nonce_off,
+                    &tb,
+                    &cb,
+                    nb,
+                    num_positions,
+                    |hit| {
+                        record(
+                            &mut csv, &task, from, &setup, to, &tb, &cb, nb, num_positions, hit,
+                        )
+                    },
+                )?;
+                // The hit rows already carry every full match, so the climb only
+                // contributes the partials it passed through on the way.
+                let partials: Vec<(u32, u32, u64)> =
+                    climb.iter().copied().filter(|s| s.0 < nb).collect();
+                if !partials.is_empty() {
+                    record_milestones(
+                        &mut csv, &task, from, &setup, to, &tb, &cb, nb, num_positions, &partials,
+                    )?;
+                }
+            } else {
                 let stop_on_full = matches!(task.match_mode, MatchMode::Full);
-                for target in &task.targets {
-                    let target = target.as_str();
-                    let (tb, cb, nb) = enc(target)?;
-                    let climb = search_target(&eng, &d_template, nonce_off, &tb, &cb, nb, num_positions, stop_on_full)?;
-                    record_milestones(&mut csv, &task, target, &tb, &cb, nb, num_positions, &climb)?;
-                }
-            }
-
-            // Collect each word (full match) in list sequence; stop if one is missing.
-            TargetMode::CollectInOrder => {
-                for target in &task.targets {
-                    let target = target.as_str();
-                    let (tb, cb, nb) = enc(target)?;
-                    let climb = search_target(&eng, &d_template, nonce_off, &tb, &cb, nb, num_positions, true)?;
-                    let best = *climb.last().unwrap();
-                    record(&mut csv, &task, target, &tb, &cb, nb, num_positions, best)?;
-                    if best.0 != nb {
-                        println!("    (stopping: {:?} not found within budget)", target);
-                        break;
-                    }
-                }
-            }
-
-            // One shared grind; each window hunts every not-yet-found word and
-            // stores whichever turn up (discovery order).
-            TargetMode::CollectAnyOrder => {
-                struct Pending<'a> {
-                    target: &'a str,
-                    tb: [u32; 8],
-                    cb: [u32; 8],
-                    nb: u32,
-                    d_target: CudaSlice<u32>,
-                    d_care: CudaSlice<u32>,
-                    best: (u32, u32, u64),
-                }
-                let mut pending: Vec<Pending> = Vec::new();
-                for target in &task.targets {
-                    let target = target.as_str();
-                    let (tb, cb, nb) = enc(target)?;
-                    pending.push(Pending {
-                        target,
-                        tb,
-                        cb,
-                        nb,
-                        d_target: eng.dev.htod_copy(tb.to_vec())?,
-                        d_care: eng.dev.htod_copy(cb.to_vec())?,
-                        best: (0, 0, 0),
-                    });
-                }
-
-                let mut base_nonce = 0u64;
-                while !pending.is_empty() && base_nonce < eng.budget {
-                    for p in pending.iter_mut() {
-                        let w = eng.launch_window(&d_template, nonce_off, &p.d_target, &p.d_care, p.nb, num_positions, base_nonce)?;
-                        p.best = better(p.best, w);
-                    }
-                    // Record words fully found this window, ordered by the nonce
-                    // they landed at (whichever turned up first), then drop them.
-                    let mut found: Vec<usize> =
-                        (0..pending.len()).filter(|&i| pending[i].best.0 == pending[i].nb).collect();
-                    found.sort_by_key(|&i| pending[i].best.2);
-                    for &i in &found {
-                        let p = &pending[i];
-                        record(&mut csv, &task, p.target, &p.tb, &p.cb, p.nb, num_positions, p.best)?;
-                    }
-                    pending.retain(|p| p.best.0 != p.nb);
-                    base_nonce += eng.span;
-                }
-                // Any words never found: record their best partial.
-                for p in &pending {
-                    record(&mut csv, &task, p.target, &p.tb, &p.cb, p.nb, num_positions, p.best)?;
-                }
+                let climb = search_target(
+                    &eng, &d_template, nonce_off, &tb, &cb, nb, num_positions, stop_on_full,
+                )?;
+                record_milestones(
+                    &mut csv, &task, from, &setup, to, &tb, &cb, nb, num_positions, &climb,
+                )?;
             }
         }
     }
