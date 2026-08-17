@@ -47,13 +47,15 @@ fn hex(bytes: &[u8]) -> String {
 #[allow(dead_code)] // Ascii7/Baudot are selectable alternatives, not all wired into ENCODINGS
 enum Encoding {
     /// One byte per char (num_bits = 8·len). Digest's leading bytes read as ASCII.
-    /// `ci` folds case for letters via a don't-care on the 0x20 bit.
+    /// `ci` — from the task's `case = "insensitive"` — folds case for letters via a
+    /// don't-care on the 0x20 bit.
     Ascii8 { ci: bool },
     /// Low 7 bits per char, packed (num_bits = 7·len). `ci` as above.
     Ascii7 { ci: bool },
-    /// ITA2 "Baudot", 5 bits per code incl. shifts. (Already case-folded.)
+    /// ITA2 "Baudot", 5 bits per code incl. shifts. Case-folded by construction, so
+    /// `case` has no effect.
     Baudot,
-    /// TNSY one-shift 4-bit Baudot-style nibble code. (Already case-folded.)
+    /// TNSY one-shift 4-bit Baudot-style nibble code. Case-folded by construction.
     Tnsy,
 }
 
@@ -106,6 +108,35 @@ impl MatchMode {
             "longest" => Ok(MatchMode::Longest),
             other => Err(format!("unknown match_mode {other:?} (want full|longest)")),
         }
+    }
+}
+
+/// Whether the comparison tells upper case from lower. Only the ASCII encodings can
+/// honour it — Baudot and TNSY fold case as part of encoding — so this is the
+/// *requested* setting; `Task::effective_case` reports what actually happened.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CaseMode {
+    Sensitive,
+    Insensitive,
+}
+
+impl CaseMode {
+    fn slug(self) -> &'static str {
+        match self {
+            CaseMode::Sensitive => "sensitive",
+            CaseMode::Insensitive => "insensitive",
+        }
+    }
+    fn from_slug(s: &str) -> Result<Self, String> {
+        match s {
+            "sensitive" => Ok(CaseMode::Sensitive),
+            "insensitive" => Ok(CaseMode::Insensitive),
+            other => Err(format!("unknown case {other:?} (want sensitive|insensitive)")),
+        }
+    }
+    /// The don't-care flag the ASCII encoders want.
+    fn insensitive(self) -> bool {
+        self == CaseMode::Insensitive
     }
 }
 
@@ -165,6 +196,7 @@ struct Task {
     edges: Vec<(String, String)>, // (from, to), in the topology's order
     source_mode: SourceMode,
     encoding: Encoding,
+    case: CaseMode, // as asked for; see effective_case
     position: PositionMode,
     match_mode: MatchMode, // ignored by Spiral, which wants every hit
 }
@@ -179,30 +211,54 @@ impl Task {
             SourceMode::Hashed => setup_hash(from.as_bytes()).to_vec(),
         }
     }
+
+    /// What the comparison actually did about case: Baudot and TNSY fold whatever
+    /// the task asked for, so this is what the CSV records.
+    fn effective_case(&self) -> CaseMode {
+        if self.encoding.folds_case() { CaseMode::Insensitive } else { self.case }
+    }
+}
+
+/// Non-fatal notes about a built task, printed once at load. Just the one so far:
+/// asking for case sensitivity from an encoding that has already folded it away.
+fn warnings(task: &Task) -> Vec<String> {
+    let mut out = Vec::new();
+    if task.encoding.folds_case() && task.case == CaseMode::Sensitive {
+        out.push(format!(
+            "task {:?}: encoding {:?} is case-folded by construction; \
+             case = \"sensitive\" has no effect (recorded as \"insensitive\")",
+            task.label,
+            task.encoding.slug(),
+        ));
+    }
+    out
 }
 
 impl Encoding {
     /// Stable, machine-readable name for the CSV (also the tasks.toml spelling).
-    fn slug(self) -> String {
+    /// Case is its own field, so it is not part of the name.
+    fn slug(self) -> &'static str {
         match self {
-            Encoding::Ascii8 { ci } => format!("ascii8{}", if ci { "_ci" } else { "" }),
-            Encoding::Ascii7 { ci } => format!("ascii7{}", if ci { "_ci" } else { "" }),
-            Encoding::Baudot => "baudot".to_string(),
-            Encoding::Tnsy => "tnsy".to_string(),
+            Encoding::Ascii8 { .. } => "ascii8",
+            Encoding::Ascii7 { .. } => "ascii7",
+            Encoding::Baudot => "baudot",
+            Encoding::Tnsy => "tnsy",
         }
     }
-    fn from_slug(s: &str) -> Result<Self, String> {
+    /// `ci` comes from the task's `case` field. Baudot and TNSY drop it on the
+    /// floor: they have already folded case by the time they emit symbols.
+    fn from_slug(s: &str, ci: bool) -> Result<Self, String> {
         match s {
-            "ascii8" => Ok(Encoding::Ascii8 { ci: false }),
-            "ascii8_ci" => Ok(Encoding::Ascii8 { ci: true }),
-            "ascii7" => Ok(Encoding::Ascii7 { ci: false }),
-            "ascii7_ci" => Ok(Encoding::Ascii7 { ci: true }),
+            "ascii8" => Ok(Encoding::Ascii8 { ci }),
+            "ascii7" => Ok(Encoding::Ascii7 { ci }),
             "baudot" => Ok(Encoding::Baudot),
             "tnsy" => Ok(Encoding::Tnsy),
-            other => Err(format!(
-                "unknown encoding {other:?} (want ascii8|ascii8_ci|ascii7|ascii7_ci|baudot|tnsy)"
-            )),
+            other => Err(format!("unknown encoding {other:?} (want ascii8|ascii7|baudot|tnsy)")),
         }
+    }
+    /// True where the encoding folds case itself, so `case` cannot mean anything.
+    fn folds_case(self) -> bool {
+        matches!(self, Encoding::Baudot | Encoding::Tnsy)
     }
 }
 
@@ -399,7 +455,7 @@ struct CsvLog {
 }
 
 impl CsvLog {
-    const HEADER: &'static str = "unix_time,task,topology,base,source_mode,encoding,target,\
+    const HEADER: &'static str = "unix_time,task,topology,base,source_mode,encoding,case,target,\
 encoded_text,position_mode,match_mode,matched_chars,total_chars,matched_bits,target_bits,\
 match_pos,full,prefix,nonce,nonce_hex,digest";
 
@@ -676,7 +732,8 @@ fn row_fields(
         task.topology.slug().to_string(),
         from.to_string(),
         task.source_mode.slug().to_string(),
-        task.encoding.slug(),
+        task.encoding.slug().to_string(),
+        task.effective_case().slug().to_string(),
         target.to_string(),
         normalized_text(task.encoding, target),
         task.position.slug().to_string(),
@@ -784,6 +841,10 @@ struct TaskConfig {
     /// serde's.
     source_mode: Option<String>,
     encoding: String,
+    /// "sensitive" (the default) or "insensitive". Insensitive frees the 0x20 bit
+    /// of each letter, so either case matches. Baudot and TNSY have already folded
+    /// case and warn if asked for sensitivity.
+    case: Option<String>,
     position: Option<String>,
     match_mode: Option<String>,
 }
@@ -873,8 +934,10 @@ impl TaskConfig {
             }
         }
 
+        let case = parse_or(self.case, CaseMode::Sensitive, CaseMode::from_slug).map_err(&ctx)?;
+
         Ok(Task {
-            encoding: Encoding::from_slug(&self.encoding).map_err(&ctx)?,
+            encoding: Encoding::from_slug(&self.encoding, case.insensitive()).map_err(&ctx)?,
             position: parse_or(self.position, PositionMode::Prefix, PositionMode::from_slug)
                 .map_err(&ctx)?,
             match_mode: parse_or(self.match_mode, MatchMode::Longest, MatchMode::from_slug)
@@ -885,6 +948,7 @@ impl TaskConfig {
             words,
             edges,
             source_mode,
+            case,
         })
     }
 }
@@ -937,12 +1001,16 @@ fn load_tasks(cli: &Cli) -> Result<(Vec<Task>, u64, String), Box<dyn std::error:
     let csv = cli.csv.clone().unwrap_or(cfg.run.csv);
 
     // Build every task, then filter: a malformed task is an error in the config
-    // whether or not this run happens to select it.
+    // whether or not this run happens to select it. Warnings, being about what a run
+    // will actually do, are only worth printing for the tasks it keeps.
     let mut tasks = Vec::new();
     for tc in cfg.task {
         let keep = cli.only.is_empty() || cli.only.iter().any(|l| l == &tc.label);
         let task = tc.build()?;
         if keep {
+            for w in warnings(&task) {
+                eprintln!("warning: {w}");
+            }
             tasks.push(task);
         }
     }
@@ -1252,8 +1320,79 @@ mod tests {
         assert_eq!(at("topology"), "star_from");
         assert_eq!(at("base"), "hub"); // the edge's from-word
         assert_eq!(at("target"), "a");
+        assert_eq!(at("case"), "sensitive");
         assert_eq!(at("full"), "true");
         assert!(!head.contains(&"target_mode"));
+    }
+
+    /// `case` is a field now, not a slug suffix: an insensitive ASCII task must
+    /// produce exactly the care mask the old `ascii8_ci` spelling produced.
+    #[test]
+    fn insensitive_case_frees_the_case_bit() {
+        let sensitive = Encoding::from_slug("ascii8", false).unwrap();
+        let insensitive = Encoding::from_slug("ascii8", true).unwrap();
+        let (_, care_s, _) = encode_target(sensitive, "aB").unwrap();
+        let (_, care_i, _) = encode_target(insensitive, "aB").unwrap();
+        // Two 8-bit chars at the top of the field: every bit significant when
+        // sensitive, 0x20 freed in each when not.
+        assert_eq!(care_s[0] >> 16, 0xffff);
+        assert_eq!(care_i[0] >> 16, 0xdfdf);
+    }
+
+    /// The suffix is gone from the name, because the name no longer carries case.
+    #[test]
+    fn encoding_slugs_have_no_case_suffix() {
+        assert_eq!(Encoding::from_slug("ascii8", true).unwrap().slug(), "ascii8");
+        assert_eq!(Encoding::from_slug("ascii7", true).unwrap().slug(), "ascii7");
+        assert!(Encoding::from_slug("ascii8_ci", false).is_err());
+    }
+
+    #[test]
+    fn case_defaults_to_sensitive() {
+        let t = build_one(&format!("label = \"c\"\nsource_mode = \"plain\"\n{REST}")).unwrap();
+        assert_eq!(t.case, CaseMode::Sensitive);
+        assert_eq!(t.effective_case(), CaseMode::Sensitive);
+        assert!(warnings(&t).is_empty());
+    }
+
+    #[test]
+    fn unknown_case_names_both_choices() {
+        let err = build_one(&format!(
+            "label = \"c\"\nsource_mode = \"plain\"\ncase = \"loose\"\n{REST}"
+        ))
+        .unwrap_err();
+        for want in ["loose", "sensitive", "insensitive"] {
+            assert!(err.contains(want), "missing {want:?} from: {err}");
+        }
+    }
+
+    /// Baudot has no case to keep. The task still loads, but it warns, and the
+    /// effective case — the one the CSV records — is insensitive either way.
+    #[test]
+    fn baudot_warns_about_sensitivity_but_still_loads() {
+        let t = build_one(
+            "label = \"b\"\nsource_mode = \"plain\"\ntopology = \"ring\"\n\
+             to = \"one two\"\nencoding = \"baudot\"\n",
+        )
+        .unwrap();
+        assert_eq!(t.case, CaseMode::Sensitive); // what was asked for
+        assert_eq!(t.effective_case(), CaseMode::Insensitive); // what happened
+        let warned = warnings(&t);
+        assert_eq!(warned.len(), 1, "{warned:?}");
+        for want in ["\"b\"", "baudot", "case", "no effect"] {
+            assert!(warned[0].contains(want), "missing {want:?} from: {}", warned[0]);
+        }
+    }
+
+    /// Saying `insensitive` out loud describes what actually happens, so no warning.
+    #[test]
+    fn tnsy_does_not_warn_when_told_insensitive() {
+        let t = build_one(
+            "label = \"t\"\nsource_mode = \"plain\"\ntopology = \"ring\"\n\
+             to = \"one two\"\nencoding = \"tnsy\"\ncase = \"insensitive\"\n",
+        )
+        .unwrap();
+        assert!(warnings(&t).is_empty());
     }
 }
 
@@ -1273,7 +1412,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cli.list {
         for t in &tasks {
             println!(
-                "{:<14} {:<10} hub {:<14} {:?}  {} edges  [{}, {}, {}, {}]",
+                "{:<14} {:<10} hub {:<14} {:?}  {} edges  [{}, {}, {}, {}, {}]",
                 t.label,
                 t.topology.slug(),
                 t.hub.as_deref().unwrap_or("—"),
@@ -1281,6 +1420,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 t.edges.len(),
                 t.source_mode.slug(),
                 t.encoding.slug(),
+                t.effective_case().slug(),
                 t.position.slug(),
                 t.match_mode.slug(),
             );
