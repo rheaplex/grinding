@@ -7,6 +7,7 @@ use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod baudot;
+mod state;
 mod tnsy;
 mod topology;
 
@@ -216,6 +217,34 @@ impl Task {
     /// the task asked for, so this is what the CSV records.
     fn effective_case(&self) -> CaseMode {
         if self.encoding.folds_case() { CaseMode::Insensitive } else { self.case }
+    }
+
+    /// The settings that decide what a scanned nonce means for this task — change
+    /// any and an old run's progress belongs to a different search. Part of the
+    /// resume key; built from the same slugs the CSV records so the two agree.
+    fn params(&self) -> String {
+        state::params_slug(
+            self.source_mode.slug(),
+            self.encoding.slug(),
+            self.effective_case().slug(),
+            self.position.slug(),
+        )
+    }
+
+    /// The resume key for one of this task's edges.
+    fn edge_key(&self, from: &str, to: &str) -> state::EdgeKey {
+        state::EdgeKey { task: self.label.clone(), from: from.to_string(), to: to.to_string(), params: self.params() }
+    }
+
+    /// Whether what the results CSV already holds for an edge is all this task
+    /// ever wanted from it. Spiral wants every hit, so nothing short of the budget
+    /// satisfies it; a full prefix match can't be bettered by anyone; and a full
+    /// match anywhere is enough once `match_mode = "full"`.
+    fn satisfied_by(&self, seen: &state::Seen) -> bool {
+        if self.topology == Topology::Spiral {
+            return false;
+        }
+        seen.full_prefix || (matches!(self.match_mode, MatchMode::Full) && seen.full_any)
     }
 }
 
@@ -586,14 +615,18 @@ fn search_target(
     care_bits: &[u32; 8],
     num_bits: u32,
     num_positions: u32,
+    start: u64,
     stop_on_full: bool,
+    mut on_progress: impl FnMut(u64) -> Result<(), Box<dyn std::error::Error>>,
 ) -> Result<Vec<(u32, u32, u64)>, Box<dyn std::error::Error>> {
     let d_target = eng.dev.htod_copy(target_bits.to_vec())?;
     let d_care = eng.dev.htod_copy(care_bits.to_vec())?;
-    let mut base_nonce = 0u64;
+    let mut base_nonce = start;
     let mut best = (0u32, 0u32, 0u64);
     let mut climb: Vec<(u32, u32, u64)> = Vec::new();
-    let mut window = 16u64; // ramp start; doubles until full-size steady launches
+    // Ramp start; doubles until full-size steady launches. A resumed search skips
+    // the ramp — its early milestones were seen and logged in the run that began it.
+    let mut window = if start > 0 { RAMP_MAX } else { 16u64 };
     while base_nonce < eng.budget {
         let (res, covered) = if window < RAMP_MAX {
             let w = window.min(eng.budget - base_nonce);
@@ -609,11 +642,12 @@ fn search_target(
             best = merged;
             climb.push(best);
         }
+        base_nonce += covered;
+        on_progress(base_nonce)?;
         let full = best.0 == num_bits;
         if (full && best.1 == 0) || (full && stop_on_full) {
             break;
         }
-        base_nonce += covered;
     }
     if climb.is_empty() {
         climb.push(best);
@@ -624,15 +658,15 @@ fn search_target(
 /// The nonce windows a spiral grinds: `(start, len)` pairs tiling `[0, budget)` in
 /// `window`-sized steps with the last one clamped. Lazy, because a 64-bit budget is
 /// 2^44 windows.
-fn fixed_windows(budget: u64, window: u64) -> impl Iterator<Item = (u64, u64)> {
-    let mut start = 0u64;
+fn fixed_windows(budget: u64, window: u64, start: u64) -> impl Iterator<Item = (u64, u64)> {
+    let mut at = start;
     std::iter::from_fn(move || {
-        if start >= budget {
+        if at >= budget {
             return None;
         }
-        let len = window.min(budget - start);
-        let w = (start, len);
-        start += len;
+        let len = window.min(budget - at);
+        let w = (at, len);
+        at += len;
         Some(w)
     })
 }
@@ -653,16 +687,18 @@ fn search_all(
     care_bits: &[u32; 8],
     num_bits: u32,
     num_positions: u32,
+    start: u64,
     mut on_hit: impl FnMut((u32, u32, u64)) -> Result<(), Box<dyn std::error::Error>>,
+    mut on_progress: impl FnMut(u64) -> Result<(), Box<dyn std::error::Error>>,
 ) -> Result<Vec<(u32, u32, u64)>, Box<dyn std::error::Error>> {
     let d_target = eng.dev.htod_copy(target_bits.to_vec())?;
     let d_care = eng.dev.htod_copy(care_bits.to_vec())?;
     let mut best = (0u32, 0u32, 0u64);
     let mut climb: Vec<(u32, u32, u64)> = Vec::new();
     let mut last_hit: Option<u64> = None;
-    for (start, len) in fixed_windows(eng.budget, SPIRAL_WINDOW) {
+    for (at, len) in fixed_windows(eng.budget, SPIRAL_WINDOW, start) {
         let (res, _) = eng.launch_sized(
-            d_template, nonce_off, &d_target, &d_care, num_bits, num_positions, start, len,
+            d_template, nonce_off, &d_target, &d_care, num_bits, num_positions, at, len,
         )?;
         // A full match: report it, unless the final short window's rounding-up
         // handed us the same nonce a second time.
@@ -675,6 +711,7 @@ fn search_all(
             best = merged;
             climb.push(best);
         }
+        on_progress(at + len)?;
     }
     if climb.is_empty() {
         climb.push(best);
@@ -813,6 +850,29 @@ struct RunConfig {
     /// counting from zero.
     budget_bits: u32,
     csv: String,
+    /// Where the resume checkpoint (each edge's scan frontier) is kept.
+    #[serde(default = "default_state")]
+    state: String,
+    /// Flush the checkpoint once this many nonces have been ground since the last
+    /// write. Bigger means less I/O but more repeated work after a kill.
+    #[serde(default = "default_checkpoint_hashes")]
+    checkpoint_hashes: u64,
+    /// ...and in any case once this many seconds have passed since the last
+    /// write, so a slow grind (`anywhere` is 256x the work) can't go long unsaved.
+    #[serde(default = "default_checkpoint_secs")]
+    checkpoint_secs: u64,
+}
+
+fn default_state() -> String {
+    "grind.state".to_string()
+}
+
+fn default_checkpoint_hashes() -> u64 {
+    1 << 30
+}
+
+fn default_checkpoint_secs() -> u64 {
+    60
 }
 
 #[derive(Deserialize)]
@@ -958,24 +1018,27 @@ struct Cli {
     config: String,
     budget_bits: Option<u32>,
     csv: Option<String>,
+    state: Option<String>,
     only: Vec<String>,
     list: bool,
 }
 
 fn parse_cli() -> Result<Cli, String> {
-    let mut cli = Cli { config: DEFAULT_CONFIG.into(), budget_bits: None, csv: None, only: vec![], list: false };
+    let mut cli =
+        Cli { config: DEFAULT_CONFIG.into(), budget_bits: None, csv: None, state: None, only: vec![], list: false };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut next = || args.next().ok_or(format!("{a} needs a value"));
         match a.as_str() {
             "--budget-bits" => cli.budget_bits = Some(next()?.parse().map_err(|_| "bad --budget-bits")?),
             "--csv" => cli.csv = Some(next()?),
+            "--state" => cli.state = Some(next()?),
             "--only" => cli.only.push(next()?),
             "--list" => cli.list = true,
             "-h" | "--help" => {
                 println!(
                     "usage: rehashed [CONFIG=tasks.toml] [--budget-bits N] [--csv PATH] \
-                     [--only LABEL]... [--list]"
+                     [--state PATH] [--only LABEL]... [--list]"
                 );
                 std::process::exit(0);
             }
@@ -986,8 +1049,18 @@ fn parse_cli() -> Result<Cli, String> {
     Ok(cli)
 }
 
-/// Load tasks.toml, apply CLI overrides, return (tasks, budget, csv_path).
-fn load_tasks(cli: &Cli) -> Result<(Vec<Task>, u64, String), Box<dyn std::error::Error>> {
+/// Everything a run needs, after config and CLI overrides are merged.
+struct Loaded {
+    tasks: Vec<Task>,
+    budget: u64,
+    csv: String,
+    state: String,
+    checkpoint_hashes: u64,
+    checkpoint_secs: u64,
+}
+
+/// Load tasks.toml, apply CLI overrides.
+fn load_tasks(cli: &Cli) -> Result<Loaded, Box<dyn std::error::Error>> {
     let text = std::fs::read_to_string(&cli.config)
         .map_err(|e| format!("reading {}: {e}", cli.config))?;
     let cfg: Config = toml::from_str(&text).map_err(|e| format!("parsing {}: {e}", cli.config))?;
@@ -999,6 +1072,9 @@ fn load_tasks(cli: &Cli) -> Result<(Vec<Task>, u64, String), Box<dyn std::error:
     // checked_shl avoids the silent `1 << 64 == 1` wrap; bits==64 means the whole space.
     let budget = 1u64.checked_shl(budget_bits).unwrap_or(u64::MAX);
     let csv = cli.csv.clone().unwrap_or(cfg.run.csv);
+    let state = cli.state.clone().unwrap_or(cfg.run.state);
+    let checkpoint_hashes = cfg.run.checkpoint_hashes;
+    let checkpoint_secs = cfg.run.checkpoint_secs;
 
     // Build every task, then filter: a malformed task is an error in the config
     // whether or not this run happens to select it. Warnings, being about what a run
@@ -1014,7 +1090,7 @@ fn load_tasks(cli: &Cli) -> Result<(Vec<Task>, u64, String), Box<dyn std::error:
             tasks.push(task);
         }
     }
-    Ok((tasks, budget, csv))
+    Ok(Loaded { tasks, budget, csv, state, checkpoint_hashes, checkpoint_secs })
 }
 
 #[cfg(test)]
@@ -1070,26 +1146,34 @@ mod tests {
     /// one best, so the window size is the collection's resolution.
     #[test]
     fn fixed_windows_tile_the_budget_exactly() {
-        let w: Vec<_> = fixed_windows(1000, 400).collect();
+        let w: Vec<_> = fixed_windows(1000, 400, 0).collect();
         assert_eq!(w, [(0, 400), (400, 400), (800, 200)]); // last one clamped
         assert_eq!(w.iter().map(|&(_, len)| len).sum::<u64>(), 1000);
     }
 
     #[test]
     fn fixed_windows_divide_evenly_without_a_stub() {
-        assert_eq!(fixed_windows(800, 400).collect::<Vec<_>>(), [(0, 400), (400, 400)]);
+        assert_eq!(fixed_windows(800, 400, 0).collect::<Vec<_>>(), [(0, 400), (400, 400)]);
     }
 
     #[test]
     fn fixed_windows_of_an_empty_budget_yield_nothing() {
-        assert_eq!(fixed_windows(0, 400).count(), 0);
+        assert_eq!(fixed_windows(0, 400, 0).count(), 0);
+    }
+
+    /// Resuming starts the tiling at `start`, so a killed spiral picks up at the
+    /// window boundary it reached instead of re-walking from zero.
+    #[test]
+    fn fixed_windows_resume_from_a_midpoint() {
+        let w: Vec<_> = fixed_windows(1000, 400, 400).collect();
+        assert_eq!(w, [(400, 400), (800, 200)]);
     }
 
     /// budget_bits = 64 means a budget of u64::MAX — 2^44 windows — so the schedule
     /// has to be lazy rather than a Vec.
     #[test]
     fn fixed_windows_is_lazy_enough_for_the_whole_nonce_space() {
-        let first: Vec<_> = fixed_windows(u64::MAX, SPIRAL_WINDOW).take(3).collect();
+        let first: Vec<_> = fixed_windows(u64::MAX, SPIRAL_WINDOW, 0).take(3).collect();
         assert_eq!(
             first,
             [
@@ -1347,6 +1431,58 @@ mod tests {
         assert!(Encoding::from_slug("ascii8_ci", false).is_err());
     }
 
+    /// What the CSV already holds counts as done only when this task would have
+    /// stopped there itself: a full prefix match for anyone but spiral, a full
+    /// match anywhere only under `match_mode = "full"`.
+    #[test]
+    fn satisfaction_follows_the_stop_rule() {
+        use state::Seen;
+        let prefix_hit = Seen { frontier: 1, full_prefix: true, full_any: true };
+        let offset_hit = Seen { frontier: 1, full_prefix: false, full_any: true };
+        let partial = Seen { frontier: 1, full_prefix: false, full_any: false };
+
+        let longest = build_one(&format!("label = \"l\"\nsource_mode = \"plain\"\n{REST}")).unwrap();
+        assert!(longest.satisfied_by(&prefix_hit));
+        assert!(!longest.satisfied_by(&offset_hit));
+        assert!(!longest.satisfied_by(&partial));
+
+        let full = build_one(&format!(
+            "label = \"f\"\nsource_mode = \"plain\"\nmatch_mode = \"full\"\nposition = \"anywhere\"\n{REST}"
+        ))
+        .unwrap();
+        assert!(full.satisfied_by(&prefix_hit));
+        assert!(full.satisfied_by(&offset_hit));
+        assert!(!full.satisfied_by(&partial));
+
+        let spiral = build_one(
+            "label = \"s\"\nsource_mode = \"plain\"\ntopology = \"spiral\"\nhub = \"h\"\n\
+             to = \"a\"\nencoding = \"ascii8\"\n",
+        )
+        .unwrap();
+        assert!(!spiral.satisfied_by(&prefix_hit));
+    }
+
+    /// The resume key carries the settings the CSV records, spelled the same way,
+    /// so an old row and a current task line up exactly when they mean the same
+    /// comparison.
+    #[test]
+    fn edge_key_params_match_the_csv_slugs() {
+        let t = build_one(&format!(
+            "label = \"k\"\nsource_mode = \"plain\"\ncase = \"insensitive\"\nposition = \"anywhere\"\n{REST}"
+        ))
+        .unwrap();
+        let k = t.edge_key("hub", "a");
+        assert_eq!((k.task.as_str(), k.from.as_str(), k.to.as_str()), ("k", "hub", "a"));
+        assert_eq!(k.params, "plain/ascii8/insensitive/anywhere");
+
+        // Baudot folds case, so the key says what actually happened, as the CSV does.
+        let b = build_one(
+            "label = \"b\"\nsource_mode = \"plain\"\ntopology = \"ring\"\nto = \"one two\"\nencoding = \"baudot\"\n",
+        )
+        .unwrap();
+        assert_eq!(b.edge_key("one", "two").params, "plain/baudot/insensitive/prefix");
+    }
+
     #[test]
     fn case_defaults_to_sensitive() {
         let t = build_one(&format!("label = \"c\"\nsource_mode = \"plain\"\n{REST}")).unwrap();
@@ -1407,7 +1543,8 @@ fn main() {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = parse_cli()?;
-    let (tasks, budget, csv_path) = load_tasks(&cli)?;
+    let Loaded { tasks, budget, csv: csv_path, state: state_path, checkpoint_hashes, checkpoint_secs } =
+        load_tasks(&cli)?;
 
     if cli.list {
         for t in &tasks {
@@ -1456,19 +1593,82 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         budget,
     };
 
+    // Resume: how far every edge already got. The CSV gives a coarse floor (its
+    // last row per edge) and says whether a full match was ever found; the
+    // checkpoint gives the precise frontier and remembers which edges stopped
+    // satisfied. An edge already satisfied is skipped under any budget; otherwise
+    // it starts from whichever frontier is further along, and is skipped only if
+    // that is already the whole budget.
+    eprintln!("resume scanning {csv_path} for prior results...");
+    let started = std::time::Instant::now();
+    let csv_seen = state::scan_results(&csv_path)?;
+    let mut checkpoint =
+        state::Checkpoint::load(&state_path, checkpoint_hashes, std::time::Duration::from_secs(checkpoint_secs))?;
+    eprintln!(
+        "resume {} edge{} known from {csv_path}, checkpoint {state_path} ({:.1}s)",
+        csv_seen.len(),
+        if csv_seen.len() == 1 { "" } else { "s" },
+        started.elapsed().as_secs_f32()
+    );
+
     for task in tasks {
         let num_positions = task.position.num_positions();
+        eprintln!(
+            "task   {:?} [{}] {} edge{}  enc {} case {} pos {} match {}",
+            task.label,
+            task.topology.slug(),
+            task.edges.len(),
+            if task.edges.len() == 1 { "" } else { "s" },
+            task.encoding.slug(),
+            task.effective_case().slug(),
+            task.position.slug(),
+            task.match_mode.slug(),
+        );
+        let (mut ground, mut skipped) = (0usize, 0usize);
         for (from, to) in &task.edges {
             // Each edge is its own search: its own preimage prefix, its own
-            // template, and a nonce counter starting at zero.
+            // template, and a nonce counter resuming where a prior run left it.
+            let key = task.edge_key(from, to);
+            let seen = csv_seen.get(&key).copied().unwrap_or_default();
+            let progress = checkpoint.progress(&key);
+            let resume = progress.frontier.max(seen.frontier);
+
+            // Skips say why, so a run that does nothing is explicable: either the
+            // edge already has the match it wanted, or it has been scanned to the
+            // current budget (raise budget_bits to take it further).
+            let why_skip = if progress.satisfied {
+                Some("already matched in full (per checkpoint)".to_string())
+            } else if task.satisfied_by(&seen) {
+                Some("already matched in full (per results csv)".to_string())
+            } else if resume >= budget {
+                Some(format!("already scanned to nonce {resume}, budget is {budget}"))
+            } else {
+                None
+            };
+            if let Some(why) = why_skip {
+                eprintln!("  skip   {from:?} -> {to:?}  — {why}");
+                skipped += 1;
+                continue;
+            }
+            eprintln!(
+                "  search {from:?} -> {to:?}  from nonce {resume} of {budget}{}",
+                if resume > 0 { "  (resuming)" } else { "" }
+            );
+            ground += 1;
+
             let setup = task.setup_for(from);
             let (template, nonce_off) = build_template(&setup);
             let d_template = eng.dev.htod_copy(template.to_vec())?;
             let (tb, cb, nb) = encode_target(task.encoding, to)?;
 
+            // Did the search stop because it found what it wanted (so no bigger
+            // budget should revisit it), or because it ran out of nonces?
+            let satisfied;
             if task.topology == Topology::Spiral {
                 // Every nonce that spells the word, not just the first — so hits
                 // are written as they turn up, and match_mode has nothing to say.
+                // It only ever stops at the budget.
+                satisfied = false;
                 let climb = search_all(
                     &eng,
                     &d_template,
@@ -1477,11 +1677,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     &cb,
                     nb,
                     num_positions,
+                    resume,
                     |hit| {
                         record(
                             &mut csv, &task, from, &setup, to, &tb, &cb, nb, num_positions, hit,
                         )
                     },
+                    |frontier| checkpoint.advance(&key, frontier).map_err(Into::into),
                 )?;
                 // The hit rows already carry every full match, so the climb only
                 // contributes the partials it passed through on the way.
@@ -1495,13 +1697,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 let stop_on_full = matches!(task.match_mode, MatchMode::Full);
                 let climb = search_target(
-                    &eng, &d_template, nonce_off, &tb, &cb, nb, num_positions, stop_on_full,
+                    &eng,
+                    &d_template,
+                    nonce_off,
+                    &tb,
+                    &cb,
+                    nb,
+                    num_positions,
+                    resume,
+                    stop_on_full,
+                    |frontier| checkpoint.advance(&key, frontier).map_err(Into::into),
                 )?;
                 record_milestones(
                     &mut csv, &task, from, &setup, to, &tb, &cb, nb, num_positions, &climb,
                 )?;
+                // Mirrors search_target's early exit: a full prefix match always
+                // ends it, a full match anywhere ends it under `full`.
+                let best = *climb.last().unwrap();
+                satisfied = best.0 == nb && (best.1 == 0 || stop_on_full);
             }
+
+            // The search returned on its own terms, so the edge is done for this
+            // budget. `advance` already carried the frontier; this records why it
+            // stopped and flushes, so a later run knows whether to skip or resume.
+            checkpoint.complete(&key, checkpoint.progress(&key).frontier, satisfied)?;
+            eprintln!(
+                "  done   {from:?} -> {to:?}  {}",
+                if satisfied { "matched in full" } else { "budget spent" }
+            );
         }
+        eprintln!("task   {:?}: {ground} ground, {skipped} skipped", task.label);
     }
 
     Ok(())

@@ -5,6 +5,15 @@
 [run]
 budget_bits = 32       # nonces per edge = 2^32, counting from zero every time
 csv = "results.csv"
+# Resume: an edge that already has its full match in the CSV is skipped; any
+# other edge picks up from the furthest of its last CSV row and the checkpoint
+# below. Raise budget_bits and the edges that ran out of nonces resume from where
+# they stopped; the satisfied ones stay skipped. Change an edge's source_mode /
+# encoding / case / position and its old progress no longer applies. All three
+# lines default, so they are optional.
+state = "grind.state"          # where each edge's scan frontier is saved
+checkpoint_hashes = 1073741824 # flush the checkpoint every 2^30 nonces...
+checkpoint_secs = 60           # ...or every minute, whichever comes first
 
 # Each word to the next: to->this, this->that.
 [[task]]

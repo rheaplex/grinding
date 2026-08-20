@@ -2,3 +2,7 @@
 
 # Generated run output (results.csv and any --csv path)
 *.csv
+
+# Resume checkpoint (grind.state and its atomic-write temp)
+grind.state
+grind.state.tmp
