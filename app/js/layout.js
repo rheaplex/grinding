@@ -41,6 +41,7 @@
     x: 246,          // words end here; nonces start mirrored from the right
     yTop: 70,        // first label y; the last mirrors it from the bottom
     leadGap: 12,     // leader clearance from the label
+    slotGap: 1.6,    // minimum label spacing, in multiples of the label size
     fanDegrees: 55   // tap fan: degrees above horizontal at the outermost band
   };
 
@@ -578,14 +579,80 @@
     const cells = [], labels = [], overlays = [], furniture = [];
     const textRows = textual ? [] : null;
     const wordX = CALLOUT.x, nonceX = width - CALLOUT.x;
-    const yTop = CALLOUT.yTop, yStep = bands > 1 ? (height - 2 * CALLOUT.yTop) / (bands - 1) : 0;
-    const callout = (b, spec, from, to) => {
-      const mid = yTop + b * yStep;
-      const y = fx(mid + wordSize * TYPE.baseline);
-      overlays.push(P("line", { x1: fx(wordX + CALLOUT.leadGap), y1: fx(mid), x2: fx(from[0]), y2: fx(from[1]), stroke: "gridline" }));
-      overlays.push(P("line", { x1: fx(nonceX - CALLOUT.leadGap), y1: fx(mid), x2: fx(to[0]), y2: fx(to[1]), stroke: "gridline" }));
-      labels.push({ ...spec.text, x: wordX, y, anchor: "end", size: wordSize });
-      labels.push({ ...spec.nonce, x: nonceX, y, anchor: "start", size: nonceSize, mono: true });
+    const yTop = CALLOUT.yTop;
+    // callouts are collected during the walk and placed afterwards: each
+    // label sits level with its own tap point on the coil (nudged apart to a
+    // minimum gap), so the leader lines fan out without crossing
+    const callouts = [];
+    const callout = (b, spec, from, to) => callouts.push({ spec, from, to });
+    const placeCallouts = () => {
+      const gap = Math.max(wordSize, nonceSize) * CALLOUT.slotGap;
+      const lo = yTop, hi = height - yTop;
+      // strict segment intersection, for the leader-uncrossing pass
+      const orient = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const crossing = (a1, a2, b1, b2) => {
+        const d1 = orient(b1, b2, a1), d2 = orient(b1, b2, a2);
+        const d3 = orient(a1, a2, b1), d4 = orient(a1, a2, b2);
+        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+               ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+      };
+      // Slot ys are the least-squares fit to the taps: minimise the total
+      // squared label-to-tap offset subject to the minimum gap. Shifting
+      // slot k by -k·gap turns the gap constraint into "non-decreasing",
+      // which pool-adjacent-violators solves exactly — so labels centre on
+      // their tap clusters (shortest, straightest leaders) instead of
+      // trailing below them. Then labels swap slots until no two leaders
+      // cross — each swap shortens the pair (triangle inequality), so the
+      // loop terminates.
+      const layoutSide = (taps, leadX) => {
+        const order = taps.map((t, i) => i).sort((a, b) => taps[a][1] - taps[b][1]);
+        const pools = [];
+        order.forEach((i, k) => {
+          let cur = { sum: taps[i][1] - k * gap, n: 1 };
+          while (pools.length && pools[pools.length - 1].sum / pools[pools.length - 1].n >= cur.sum / cur.n) {
+            const p = pools.pop();
+            cur = { sum: p.sum + cur.sum, n: p.n + cur.n };
+          }
+          pools.push(cur);
+        });
+        const slotYs = [];
+        for (const p of pools) {
+          for (let i = 0; i < p.n; i++) slotYs.push(p.sum / p.n + slotYs.length * gap);
+        }
+        // clamp into the column, preserving the gaps
+        let prev = -Infinity;
+        for (let k = 0; k < slotYs.length; k++) {
+          slotYs[k] = Math.max(slotYs[k], lo, prev + gap);
+          prev = slotYs[k];
+        }
+        let next = Infinity;
+        for (let k = slotYs.length - 1; k >= 0; k--) {
+          slotYs[k] = Math.min(slotYs[k], hi, next - gap);
+          next = slotYs[k];
+        }
+        for (let pass = 0, swapped = true; swapped && pass < order.length; pass++) {
+          swapped = false;
+          for (let a = 0; a < order.length; a++) {
+            for (let b = a + 1; b < order.length; b++) {
+              if (crossing([leadX, slotYs[a]], taps[order[a]], [leadX, slotYs[b]], taps[order[b]])) {
+                [order[a], order[b]] = [order[b], order[a]];
+                swapped = true;
+              }
+            }
+          }
+        }
+        const pos = new Array(taps.length);
+        order.forEach((ci, k) => { pos[ci] = slotYs[k]; });
+        return pos;
+      };
+      const wordYs = layoutSide(callouts.map(c => c.from), wordX + CALLOUT.leadGap);
+      const nonceYs = layoutSide(callouts.map(c => c.to), nonceX - CALLOUT.leadGap);
+      callouts.forEach((c, i) => {
+        overlays.push(P("line", { x1: fx(wordX + CALLOUT.leadGap), y1: fx(wordYs[i]), x2: fx(c.from[0]), y2: fx(c.from[1]), stroke: "gridline" }));
+        overlays.push(P("line", { x1: fx(nonceX - CALLOUT.leadGap), y1: fx(nonceYs[i]), x2: fx(c.to[0]), y2: fx(c.to[1]), stroke: "gridline" }));
+        labels.push({ ...c.spec.text, x: wordX, y: fx(wordYs[i] + wordSize * TYPE.baseline), anchor: "end", size: wordSize });
+        labels.push({ ...c.spec.nonce, x: nonceX, y: fx(nonceYs[i] + wordSize * TYPE.baseline), anchor: "start", size: nonceSize, mono: true });
+      });
     };
     const bandSpec = b => (header && b === 0)
       ? { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } }
@@ -631,6 +698,7 @@
         callout(b, bandSpec(b), start, pts[pts.length - 1]);
         walk.advance(SPIRAL.gapChars * charW); // breathing room before the next run
       }
+      placeCallouts();
     } else {
       // cell size solved the same way: N cells at their run spacing fill it
       const N = bands * cols;
@@ -669,6 +737,7 @@
         callout(b, bandSpec(b), run[0], run[run.length - 1]);
         walk.advance(d * SPIRAL.runGap); // breathing room before the next run
       }
+      placeCallouts();
     }
     return { width, height, cells, textRows, furniture, overlays, labels, header: headerModel, display };
   }

@@ -1,0 +1,60 @@
+{
+  "name": "Attribution",
+  "description": "rhea and myers ground from artist — every hit collected. Proof-of-work text search: each candidate hashes the base “artist” with an incrementing counter appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word. Every hash shown was actually found, across 72,110,028,168,733 attempts. Number 12 of the 12 Grinding tokens.",
+  "external_url": "https://show.rhea.art/grinding/attribution.html",
+  "attributes": [
+    {
+      "trait_type": "Work",
+      "value": "Attribution"
+    },
+    {
+      "trait_type": "Base",
+      "value": "artist"
+    },
+    {
+      "trait_type": "Topology",
+      "value": "spiral"
+    },
+    {
+      "trait_type": "Search Encoding",
+      "value": "ascii8"
+    },
+    {
+      "trait_type": "Hash Function",
+      "value": "SHA-256"
+    },
+    {
+      "trait_type": "Searches",
+      "value": "2"
+    },
+    {
+      "trait_type": "Matches",
+      "value": "6"
+    },
+    {
+      "trait_type": "Hashes",
+      "value": "72110028168733"
+    },
+    {
+      "trait_type": "Hits Collected",
+      "value": "15748"
+    }
+  ],
+  "tags": [
+    "grinding",
+    "proof-of-work",
+    "hash",
+    "text",
+    "generative"
+  ],
+  "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/12.png",
+  "image_sha256": "effc7d539d3e6ef624079090459b545187dbe6812760b0408afc6830732b0dc2",
+  "animation_url": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/attribution.html",
+  "animation_sha256": "ad94a0d4d04839e90546f67120b4fb90cf87cce53ee5fd67c2855ed2ef5a79ea",
+  "media": {
+    "uri": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/attribution.html",
+    "size": "4619",
+    "dimensions": "1920x1080",
+    "mimeType": "text/html"
+  }
+}

@@ -21,16 +21,17 @@
   // steps are the flattened progression: { row, matchedChars, achievedChars,
   // nonce, prevNonce, deltaAttempts, hash } in grind order.
   function schedule(steps, opts = {}) {
-    const { timeScale = 1, holdMs = 7000, baseMs = 650, spanMs = 2500, compress = Math.sqrt, drawMs = null, rowPauseMs = 0 } = opts;
+    const { timeScale = 1, holdMs = 7000, baseMs = 650, spanMs = 2500, compress = Math.sqrt, drawMs = null, rowPauseMs = 0, header = true } = opts;
     const slowest = Math.max(...steps.map(work));
     let durations = steps.map(s => (baseMs + spanMs * compress(work(s) / slowest)) / timeScale);
     // a rest after each row's final step — not after the last row — plus a
-    // two-part lead-in: a rest with everything pending, then the initial
-    // value appears and rests before the first row begins
+    // lead-in: a rest with everything pending, then, for the pieces that draw
+    // an initial-value row, that row appears and rests too before the first
+    // row begins; with no such row the second rest would stage nothing
     const pauses = steps.map((s, i) =>
       rowPauseMs && steps[i + 1] && steps[i + 1].row !== s.row ? rowPauseMs : 0);
     const headerAt = rowPauseMs;
-    const lead = rowPauseMs * 2;
+    const lead = rowPauseMs * (header ? 2 : 1);
     const pauseTotal = lead + pauses.reduce((a, p) => a + p, 0);
     const workTotal = durations.reduce((a, d) => a + d, 0);
     // an explicit drawing time rescales the grind so the whole drawing

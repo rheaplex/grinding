@@ -1,0 +1,56 @@
+{
+  "name": "Shape",
+  "description": "Nine shapes ground in a ring — dot round to spiral and back to dot. Proof-of-work text search: each candidate hashes the base “dot” with an incrementing counter appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word. Every hash shown was actually found, across 21,764,985,680,804 attempts. Number 2 of the 12 Grinding tokens.",
+  "external_url": "https://show.rhea.art/grinding/shape.html",
+  "attributes": [
+    {
+      "trait_type": "Work",
+      "value": "Shape"
+    },
+    {
+      "trait_type": "Base",
+      "value": "dot"
+    },
+    {
+      "trait_type": "Topology",
+      "value": "ring"
+    },
+    {
+      "trait_type": "Search Encoding",
+      "value": "ascii8"
+    },
+    {
+      "trait_type": "Hash Function",
+      "value": "SHA-256"
+    },
+    {
+      "trait_type": "Searches",
+      "value": "9"
+    },
+    {
+      "trait_type": "Matches",
+      "value": "40"
+    },
+    {
+      "trait_type": "Hashes",
+      "value": "21764985680804"
+    }
+  ],
+  "tags": [
+    "grinding",
+    "proof-of-work",
+    "hash",
+    "text",
+    "generative"
+  ],
+  "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/2.png",
+  "image_sha256": "67b31d73d6a214dccd8a0fc3e2fa457c01869138acbd036e25c6257e7f6b413c",
+  "animation_url": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/shape.html",
+  "animation_sha256": "a5d0b7fe88cc7a12b3e02996f1effc253eaeaa6914d00a5a692e74ce2b67820d",
+  "media": {
+    "uri": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/shape.html",
+    "size": "4736",
+    "dimensions": "1920x1080",
+    "mimeType": "text/html"
+  }
+}

@@ -1,0 +1,82 @@
+# Every topology, once, as a worked example of the vocabulary. Copy to tasks.toml
+# and edit. `topology` and `source_mode` are required; `case`, `position` and
+# `match_mode` default to sensitive / prefix / longest.
+
+[run]
+budget_bits = 48       # nonces per edge = 2^32, counting from zero every time
+csv = "results.csv"
+
+[[task]]
+label       = "But I can't just be a girl!"
+topology    = "chain"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "sensitive"
+words       = [ "But I can't be a girl!", "yes", "you", "can" ]
+
+[[task]]
+label       = "passions"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "passions"
+words       = [ "joy", "love", "wonder", "hatred", "desire", "sorrow" ]
+
+[[task]]
+label       = "shape"
+topology    = "ring"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+words       = [ "dot", "arc", "line", "curve", "plane", "circle", "square",
+                "star", "spiral" ]
+
+[[task]]
+label       = "gender"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "gender"
+words       = [ "she", "her", "they", "girl", "woman", "femme", "butch",
+                "demi", "trans", "queer" ]
+
+########################################################################
+# IN PROGRESS
+########################################################################
+
+# The return grind for Attribution: artist itself being ground, from rhea
+# and from myers. generate.js picks these up as the work's return searches
+# once rows land in results.csv.
+[[task]]
+label       = "attribution"
+topology    = "star_to"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "artist"
+words       = [ "rhea", "myers" ]
+
+[[task]]
+label       = "pattern"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "pattern"
+words       = [ "plain", "grid", "checks", "dots", "stripes", "hexes",
+                "repeat", "glitch", "floral" ]
+
+[[task]]
+label       = "saturation"
+topology    = "chain"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "grey", "dull", "muted", "mild", "rich", "deep", "strong",
+                "vivid", "neon" ]
+
+[[task]]
+label       = "brightness"
+topology    = "chain"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "black", "dark", "dim", "grey", "medium", "light", "pale",
+                "bright", "white" ]

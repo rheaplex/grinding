@@ -10,7 +10,7 @@
     display: "squares", // squares | circles | hex | ascii
     sizing: "fit", // fit | fill | overlap — element size on the fanning layouts
     channelFloor: undefined, // raise for dark grounds so zero bytes stay visible
-    timeScale: 1, holdSeconds: 7, drawSeconds: null, // null = data-driven; 0 = still
+    timeScale: 1, holdSeconds: 60, drawSeconds: null, // null = data-driven; 0 = still
     rowPauseSeconds: 2, // rest between rows (not after the last); 0 = none
     cellGap: 0.06, decorations: true, labels: null, salt: 0
   };
@@ -86,10 +86,16 @@
     const display = o.display || "squares";
     const textual = display === "hex" || display === "ascii";
     const glyphs = display === "ascii" ? 32 : 64;
-    // the initial value: base ‖ zeroed 64-bit nonce, a row in the same format
+    // the initial value: base ‖ zeroed 64-bit nonce, a row in the same
+    // format. The hub topologies draw no such row — there the base is the
+    // concept the words are ground from, not part of the composition — and
+    // a series can decline its seed row explicitly (seedRow: false)
     const base = grinding.series && grinding.series.base;
+    const topology = grinding.series && grinding.series.topology;
+    const hubConcept = topology === "star_from" || topology === "spiral";
+    const seedRow = !grinding.series || grinding.series.seedRow !== false;
     const header = o.header !== undefined ? o.header
-      : (base ? { plaintext: base, nonce: "0" } : null);
+      : (base && !hubConcept && seedRow ? { plaintext: base, nonce: "0" } : null);
     const model = layout.build(o.layout, searches.length, cols, {
       gap: o.cellGap, decorations: o.decorations, header, display, glyphs,
       sizing: o.sizing,
@@ -111,7 +117,8 @@
     const sched = animation.schedule(steps, {
       timeScale: o.timeScale, holdMs: o.holdSeconds * 1000,
       drawMs: o.drawSeconds > 0 ? o.drawSeconds * 1000 : null,
-      rowPauseMs: (o.rowPauseSeconds || 0) * 1000
+      rowPauseMs: (o.rowPauseSeconds || 0) * 1000,
+      header: !!header
     });
     return {
       options: o, searches, steps, encoding: o.encoding, enc, cols, model, sched,
@@ -159,7 +166,7 @@
       "grinding | " + s.name.toLowerCase() + " | base " + s.base + " | " + s.searchEncoding + " | " + s.hashFunction,
       art.options.layout + " | " + art.enc.label + " | frame " + ph.frame + " of " + ph.frames + " @ " + art.fps + "fps",
       "easing " + art.options.easing + " | timeScale " + art.options.timeScale + " | salt " + art.options.salt,
-      ...art.searches.map(r => r.word + " | " + (r.steps ? r.steps.length : 1) + " matches | nonce " + r.nonce + " | " + r.hash)
+      ...art.searches.map(r => r.word + " | " + (r.steps ? r.steps.length : 1) + " matches | counter " + r.nonce + " | " + r.hash)
     ];
   }
 

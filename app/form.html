@@ -28,7 +28,7 @@
       <div class="trow"><div class="label">Target</div><div class="value" id="t-target">&mdash;</div></div>
       <div class="trow"><div class="label">Match</div><div class="value" id="t-match">&mdash;</div></div>
       <div class="trow"><div class="label">Encoded</div><div class="value small" id="t-encoded">&mdash;</div></div>
-      <div class="trow"><div class="label">Nonce</div><div class="value small" id="t-nonce">&mdash;</div></div>
+      <div class="trow"><div class="label">Counter</div><div class="value small" id="t-nonce">&mdash;</div></div>
       <div class="trow"><div class="label">Step</div><div class="value small" id="t-step">&mdash;</div></div>
       <div class="totals">
         <div class="head-small">Totals</div>
@@ -44,13 +44,13 @@
   <footer class="colophon">
     <div class="packages">
       <div class="package"><span class="name">base</span><br>
-        <span class="note">Every candidate hashes <span class="name">point</span> with a 64-bit little-endian nonce appended: sha256(&thinsp;point&thinsp;&#8214;&thinsp;nonce&thinsp;).</span></div>
+        <span class="note">Every candidate hashes <span class="name">point</span> with a 64-bit little-endian counter appended: sha256(&thinsp;point&thinsp;&#8214;&thinsp;counter&thinsp;).</span></div>
       <div class="package"><span class="name">ascii8</span><br>
         <span class="note">One byte per character. A match means the SHA-256 hash prefix spells the word in ASCII hex.</span></div>
       <div class="package"><span class="name">targets</span><br>
         <span class="note">line, plane, volume &mdash; each successively longer prefix match kept on the way to the full word.</span></div>
-      <div class="package"><span class="name">nonces</span><br>
-        <span class="note">Winning nonces from 76 to 28.3 trillion, within a 2<sup>49</sup> budget per target.</span></div>
+      <div class="package"><span class="name">counters</span><br>
+        <span class="note">Winning counter values from 76 to 28.3 trillion, within a 2<sup>49</sup> budget per target.</span></div>
     </div>
   </footer>
 
@@ -65,11 +65,11 @@
     <div class="config-section">
       <div class="micro dim">Duration</div>
       <div class="config-row">
-        <input id="duration" type="number" min="0" step="1" value="30">
+        <input id="duration" type="number" min="0" step="1" value="120">
         <span class="note">seconds the drawing should take &mdash; 0 renders the final state instantly</span>
       </div>
       <div class="config-row">
-        <input id="pause" type="number" min="0" step="1" value="7">
+        <input id="pause" type="number" min="0" step="1" value="60">
         <span class="note">seconds to pause on the final state after each cycle &mdash; 0 runs once and stops</span>
       </div>
       <div class="config-row">

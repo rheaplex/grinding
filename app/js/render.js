@@ -351,6 +351,13 @@
             // letters that have matched in black; the rest stay grid-grey
             const m = extras.matched ? extras.matched[spec.row] : (rec.matchedChars ?? rec.totalChars ?? rec.plaintext.length);
             node.textContent = "";
+            if (rec.labelPrefix) {
+              // provenance for rows whose base differs (star_to, spiral):
+              // stays quiet grey, never part of the match marking
+              const pre = el("tspan", { fill: t.grid });
+              pre.textContent = rec.labelPrefix;
+              node.appendChild(pre);
+            }
             const head = el("tspan", { fill: t.ink });
             head.textContent = rec.plaintext.slice(0, m);
             const tail = el("tspan", { fill: t.grid });
@@ -547,6 +554,7 @@
       if (l.field === "plaintext") {
         const m = state.matched ? state.matched[l.row] : (rec.matchedChars ?? rec.totalChars ?? rec.plaintext.length);
         out += open(null) +
+          (rec.labelPrefix ? '<tspan fill="' + t.grid + '">' + esc(rec.labelPrefix) + "</tspan>" : "") +
           '<tspan fill="' + t.ink + '">' + esc(rec.plaintext.slice(0, m)) + "</tspan>" +
           '<tspan fill="' + t.grid + '">' + esc(rec.plaintext.slice(m)) + "</tspan>" +
           "</text>\n";

@@ -123,25 +123,29 @@ a:hover { color: var(--magic); }
 
 /* ---- index: the list of works ---- */
 
+/* twelve works: two columns of six, read down each column */
 .works {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(6, auto);
+  grid-auto-flow: column;
+  column-gap: 72px;
+  align-content: center;
 }
 
 a.work {
   display: grid;
-  grid-template-columns: 176px 1fr auto;
-  gap: 32px;
+  grid-template-columns: 44px 1fr;
+  gap: 6px 20px;
   align-items: baseline;
-  padding: 34px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--rule-soft);
 }
 
 .work-title {
-  font-size: 56px;
+  font-size: 38px;
   line-height: 1;
   font-weight: 700;
   letter-spacing: -0.045em;
@@ -149,7 +153,7 @@ a.work {
 
 a.work:hover .work-title { color: var(--magic); }
 
-.work-note { text-align: right; }
+.work-note { grid-column: 2; }
 
 /* ---- colophon ---- */
 
@@ -201,6 +205,9 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
 .config-section { display: flex; flex-direction: column; gap: 10px; }
 
 .config-row { display: flex; gap: 18px; align-items: baseline; }
+
+/* a transaction hash is wider than the dialog: its own line, broken anywhere */
+#chain-tx { font-family: var(--mono); word-break: break-all; }
 
 .note { font-size: 12px; color: var(--dim); line-height: 1.5; }
 

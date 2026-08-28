@@ -1,0 +1,56 @@
+{
+  "name": "Time",
+  "description": "The day as a ring — night, dawn, morn, noon, dusk, eve. Proof-of-work text search: each candidate hashes the base “night” with an incrementing counter appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word. Every hash shown was actually found, across 924,203,587,018 attempts. Number 6 of the 12 Grinding tokens.",
+  "external_url": "https://show.rhea.art/grinding/time.html",
+  "attributes": [
+    {
+      "trait_type": "Work",
+      "value": "Time"
+    },
+    {
+      "trait_type": "Base",
+      "value": "night"
+    },
+    {
+      "trait_type": "Topology",
+      "value": "ring"
+    },
+    {
+      "trait_type": "Search Encoding",
+      "value": "ascii8"
+    },
+    {
+      "trait_type": "Hash Function",
+      "value": "SHA-256"
+    },
+    {
+      "trait_type": "Searches",
+      "value": "6"
+    },
+    {
+      "trait_type": "Matches",
+      "value": "24"
+    },
+    {
+      "trait_type": "Hashes",
+      "value": "924203587018"
+    }
+  ],
+  "tags": [
+    "grinding",
+    "proof-of-work",
+    "hash",
+    "text",
+    "generative"
+  ],
+  "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/6.png",
+  "image_sha256": "ac25e78684b53a5a40d368560b4cb0fa6eb17529d24f6f938579d441fec7cba4",
+  "animation_url": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/time.html",
+  "animation_sha256": "b58eba68ecc82335786db069016e1d3408aebeec9d6a604bf531f9cb52b5c9f9",
+  "media": {
+    "uri": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/time.html",
+    "size": "4684",
+    "dimensions": "1920x1080",
+    "mimeType": "text/html"
+  }
+}

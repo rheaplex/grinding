@@ -20,37 +20,18 @@
 
   <section class="stage">
     <div id="host" class="host"></div>
-    <!-- telemetry kept for possible restoration: uncomment this aside and
-         switch .stage back to grid-template-columns: 1fr 300px in styles.css
-    <aside class="telemetry">
-      <div class="head">Telemetry</div>
-      <div class="trow"><div class="label">Search</div><div class="value" id="t-search">&mdash;</div></div>
-      <div class="trow"><div class="label">Target</div><div class="value" id="t-target">&mdash;</div></div>
-      <div class="trow"><div class="label">Match</div><div class="value" id="t-match">&mdash;</div></div>
-      <div class="trow"><div class="label">Encoded</div><div class="value small" id="t-encoded">&mdash;</div></div>
-      <div class="trow"><div class="label">Nonce</div><div class="value small" id="t-nonce">&mdash;</div></div>
-      <div class="trow"><div class="label">Step</div><div class="value small" id="t-step">&mdash;</div></div>
-      <div class="totals">
-        <div class="head-small">Totals</div>
-        <div class="row"><span>Searches</span><span id="total-searches">&mdash;</span></div>
-        <div class="row"><span>Matches</span><span id="total-matches">&mdash;</span></div>
-        <div class="row"><span>Hashes</span><span id="total-hashes">&mdash;</span></div>
-      </div>
-      <div id="status">Loading</div>
-    </aside>
-    -->
   </section>
 
   <footer class="colophon">
     <div class="packages">
       <div class="package"><span class="name">base</span><br>
-        <span class="note">Every candidate hashes <span class="name">one</span> with a 64-bit little-endian nonce appended: sha256(&thinsp;one&thinsp;&#8214;&thinsp;nonce&thinsp;).</span></div>
+        <span class="note">Each candidate hashes the word before it with a 64-bit little-endian counter appended: sha256(&thinsp;word&thinsp;&#8214;&thinsp;counter&thinsp;). <span class="name">zero</span> seeds the chain.</span></div>
       <div class="package"><span class="name">ascii8</span><br>
         <span class="note">One byte per character. A match means the SHA-256 hash prefix spells the word in ASCII hex.</span></div>
       <div class="package"><span class="name">targets</span><br>
-        <span class="note">two through ten &mdash; each successively longer prefix match kept on the way to the full word.</span></div>
-      <div class="package"><span class="name">nonces</span><br>
-        <span class="note">Winning nonces from 4 to 3.2 trillion, within a 2<sup>49</sup> budget per target.</span></div>
+        <span class="note">one through twelve — each word ground from the one before it, each successively longer prefix match kept on the way to the full word.</span></div>
+      <div class="package"><span class="name">counters</span><br>
+        <span class="note">Winning counter values from 10 million to 52 trillion, within a 2<sup>48</sup> budget per search.</span></div>
     </div>
   </footer>
 
@@ -65,11 +46,11 @@
     <div class="config-section">
       <div class="micro dim">Duration</div>
       <div class="config-row">
-        <input id="duration" type="number" min="0" step="1" value="30">
+        <input id="duration" type="number" min="0" step="1" value="120">
         <span class="note">seconds the drawing should take &mdash; 0 renders the final state instantly</span>
       </div>
       <div class="config-row">
-        <input id="pause" type="number" min="0" step="1" value="7">
+        <input id="pause" type="number" min="0" step="1" value="60">
         <span class="note">seconds to pause on the final state after each cycle &mdash; 0 runs once and stops</span>
       </div>
       <div class="config-row">
@@ -106,6 +87,14 @@
         <button type="button" id="save-final" class="micro link">Save SVG &mdash; final state</button>
       </div>
     </div>
+    <div class="config-section" id="chain-section" hidden>
+      <div class="micro dim">Chain</div>
+      <div class="config-row">
+        <button type="button" id="chain-save" class="micro link">Save config to chain</button>
+        <span class="note" id="chain-status">the token owner can store this display configuration on chain</span>
+      </div>
+      <div class="note" id="chain-tx" hidden></div>
+    </div>
   </div>
 </dialog>
 
@@ -115,6 +104,8 @@
 <script src="js/render.js"></script>
 <script src="js/artwork.js"></script>
 <script src="data/number.js"></script>
+<script src="js/chain-config.js"></script>
+<script src="js/chain.js"></script>
 <script src="js/app.js"></script>
 
 </body>

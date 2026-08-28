@@ -1,0 +1,56 @@
+{
+  "name": "Value",
+  "description": "Use, utility, aura, price, worth — five searches for art. Proof-of-work text search: each candidate hashes its base word with an incrementing counter appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word. Every hash shown was actually found, across 128,694,407 attempts. Number 8 of the 12 Grinding tokens.",
+  "external_url": "https://show.rhea.art/grinding/value.html",
+  "attributes": [
+    {
+      "trait_type": "Work",
+      "value": "Value"
+    },
+    {
+      "trait_type": "Base",
+      "value": "per search"
+    },
+    {
+      "trait_type": "Topology",
+      "value": "star_to"
+    },
+    {
+      "trait_type": "Search Encoding",
+      "value": "ascii8"
+    },
+    {
+      "trait_type": "Hash Function",
+      "value": "SHA-256"
+    },
+    {
+      "trait_type": "Searches",
+      "value": "5"
+    },
+    {
+      "trait_type": "Matches",
+      "value": "15"
+    },
+    {
+      "trait_type": "Hashes",
+      "value": "128694407"
+    }
+  ],
+  "tags": [
+    "grinding",
+    "proof-of-work",
+    "hash",
+    "text",
+    "generative"
+  ],
+  "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/8.png",
+  "image_sha256": "ca83d15c52843a0fb22c6546c39395e0b60c502aec11d03ed29e9544b639ddfc",
+  "animation_url": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/value.html",
+  "animation_sha256": "22322ed5067d84709b57d9c2755fc7d5fbd70f04b3e041916360f852a13c99a3",
+  "media": {
+    "uri": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/value.html",
+    "size": "4683",
+    "dimensions": "1920x1080",
+    "mimeType": "text/html"
+  }
+}

@@ -1,0 +1,281 @@
+# Every topology, once, as a worked example of the vocabulary. Copy to tasks.toml
+# and edit. `topology` and `source_mode` are required; `case`, `position` and
+# `match_mode` default to sensitive / prefix / longest.
+
+[run]
+budget_bits = 42       # nonces per edge = 2^32, counting from zero every time
+csv = "results.csv"
+
+########################################################################
+# Base
+########################################################################
+
+[[task]]
+label       = "hue"
+topology    = "ring"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "red", "blue", "pink", "grey", "black", "white", "green",
+                "brown", "yellow", "purple", "orange" ]
+
+[[task]]
+label       = "number"
+topology    = "chain"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "zero", "one", "two", "three", "four", "five",
+                "six", "seven", "eight", "nine", "ten", "eleven", "twelve" ]
+
+[[task]]
+label       = "passions"
+topology    = "star_to"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "passions"
+words       = [ "joy", "love", "wonder", "hatred", "desire", "sorrow" ]
+
+[[task]]
+label       = "shape"
+topology    = "star_to"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "shape"
+words       = [ "dot", "arc", "line", "curve", "plane", "circle", "square",
+                "star", "spiral" ]
+
+[[task]]
+label       = "value"
+topology    = "star_to"
+hub         = "art"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "use", "utility", "aura", "price", "worth" ] #, "exchange",
+            #   "historical", "aesthetic", "provenance" ]
+
+[[task]]
+label       = "direction"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "center"
+words       = [ "up", "in", "out", "down", "left", "over", "under", "right" ]
+
+
+########################################################################
+# Tendentious
+########################################################################
+
+[[task]]
+label       = "gender"
+topology    = "star_to"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "gender"
+words       = [ "she", "her", "they", "girl", "woman", "femme", "butch",
+                "demi", "trans", "queer" ]
+
+[[task]]
+label       = "attribution"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "artist"
+words       = [ "rhea", "myers" ]
+
+[[task]]
+label       = "spiral"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "grinding"
+words       = [ "./spiral" ]
+
+[[task]]
+label       = "art"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "art"
+words       = [ "art" ]
+
+[[task]]
+label       = "searching for inspiration"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "grinding"
+words       = [ "inspiration" ]
+
+[[task]]
+label       = "there were no signs"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "there were no signs"
+words       = [ "sign" ]
+
+[[task]]
+label       = "there is no art in hashspace"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "there were no signs"
+words       = [ "art" ]
+
+[[task]]
+label       = "but I can't be a girl"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "you are"
+words       = [ "yes" ]
+
+
+########################################################################
+# IN PROGRESS
+########################################################################
+
+[[task]]
+label       = "time"
+topology    = "ring"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "night", "dawn", "morn", "noon", "dusk", "eve" ]
+
+[[task]]
+label       = "genre"
+topology    = "chain"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "myth", "face", "scene", "land", "beast", "thing" ]
+# history, portrait, genre, landscape, animal, still life
+
+[[task]]
+label       = "pattern"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "pattern"
+words       = [ "plain", "grid", "checks", "dots", "stripes", "hexes",
+                "repeat", "glitch", "floral" ]
+
+[[task]]
+label       = "saturation"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "pattern"
+words       = [ "grey", "dull", "muted", "mild", "rich", "deep", "strong",
+                "vivid", "neon" ]
+
+[[task]]
+label       = "brightness"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "brightness"
+words       = [ "black", "dark", "dim", "grey", "medium", "light", "pale",
+                "bright", "white" ]
+
+
+########################################################################
+# Base
+########################################################################
+
+[[task]]
+label       = "hue"
+topology    = "ring"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "red", "blue", "pink", "grey", "black", "white", "green",
+                "brown", "yellow", "purple", "orange" ]
+
+[[task]]
+label       = "number"
+topology    = "chain"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "zero", "one", "two", "three", "four", "five",
+                "six", "seven", "eight", "nine", "ten", "eleven", "twelve" ]
+
+[[task]]
+label       = "attribution"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "artist"
+words       = [ "rhea", "myers" ]
+
+[[task]]
+label       = "spiral"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "grinding"
+words       = [ "./spiral" ]
+
+[[task]]
+label       = "art"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "art"
+words       = [ "art" ]
+
+[[task]]
+label       = "searching for inspiration"
+topology    = "spiral"
+source_mode = "plain"
+encoding    = "ascii8"
+case        = "insensitive"
+hub         = "grinding"
+words       = [ "inspiration" ]
+
+
+#[[task]]
+#label       = "surface"
+
+#[[task]]
+#label       = "form"
+
+
+
+[[task]]
+label       = "time"
+topology    = "ring"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "night", "dawn", "morn", "noon", "dusk", "eve" ]
+
+[[task]]
+label       = "genre"
+topology    = "chain"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "myth", "face", "scene", "land", "beast", "thing" ]
+# history, portrait, genre, landscape, animal, still life
+
+
+[[task]]
+label       = "value"
+topology    = "star_to"
+hub         = "art"
+source_mode = "plain"
+encoding    = "ascii8"
+words       = [ "use", "utility", "aura", "price", "worth" ] #, "exchange",
+            #   "historical", "aesthetic", "provenance" ]
+
+
+[[task]]
+label       = "direction"
+topology    = "star_from"
+source_mode = "plain"
+encoding    = "ascii8"
+hub         = "center"
+words       = [ "up", "in", "out", "down", "left", "over", "under", "right" ]

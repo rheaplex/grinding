@@ -1,0 +1,56 @@
+{
+  "name": "Gender",
+  "description": "She, her, they, girl, woman, femme, butch, demi, trans, queer — ground from gender. Proof-of-work text search: each candidate hashes the base “gender” with an incrementing counter appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word. Every hash shown was actually found, across 8,203,560,466,019 attempts. Number 10 of the 12 Grinding tokens.",
+  "external_url": "https://show.rhea.art/grinding/gender.html",
+  "attributes": [
+    {
+      "trait_type": "Work",
+      "value": "Gender"
+    },
+    {
+      "trait_type": "Base",
+      "value": "gender"
+    },
+    {
+      "trait_type": "Topology",
+      "value": "star_from"
+    },
+    {
+      "trait_type": "Search Encoding",
+      "value": "ascii8"
+    },
+    {
+      "trait_type": "Hash Function",
+      "value": "SHA-256"
+    },
+    {
+      "trait_type": "Searches",
+      "value": "10"
+    },
+    {
+      "trait_type": "Matches",
+      "value": "43"
+    },
+    {
+      "trait_type": "Hashes",
+      "value": "8203560466019"
+    }
+  ],
+  "tags": [
+    "grinding",
+    "proof-of-work",
+    "hash",
+    "text",
+    "generative"
+  ],
+  "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/10.png",
+  "image_sha256": "72f3c9e2fbca2438fda87b755976ff1e6590c0e3d500555ee4d9600336933f3d",
+  "animation_url": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/gender.html",
+  "animation_sha256": "7013e8e4c943400bb1e5ab2c9b102f103373d74142324a54fce61c21421e0083",
+  "media": {
+    "uri": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/gender.html",
+    "size": "4630",
+    "dimensions": "1920x1080",
+    "mimeType": "text/html"
+  }
+}

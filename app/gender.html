@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gender — Grinding</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<main class="plate-page">
+
+  <section class="titleblock">
+    <div class="micro kicker"><em class="worktitle">Grinding</em><br>2026<br>Rhea Myers</div>
+    <h1 id="series-name">Gender</h1>
+    <div class="titleblock-actions micro">
+      <button type="button" id="config-open" class="link">Config</button>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div id="host" class="host"></div>
+  </section>
+
+  <footer class="colophon">
+    <div class="packages">
+      <div class="package"><span class="name">base</span><br>
+        <span class="note">Every candidate hashes <span class="name">gender</span> with a 64-bit little-endian counter appended: sha256(&thinsp;gender&thinsp;&#8214;&thinsp;counter&thinsp;).</span></div>
+      <div class="package"><span class="name">ascii8</span><br>
+        <span class="note">One byte per character. A match means the SHA-256 hash prefix spells the word in ASCII hex.</span></div>
+      <div class="package"><span class="name">targets</span><br>
+        <span class="note">she, her, they, girl, woman, femme, butch, demi, trans, queer — each ground from gender, each successively longer prefix match kept.</span></div>
+      <div class="package"><span class="name">counters</span><br>
+        <span class="note">Winning counter values from 3.1 million to 2.6 trillion, within a 2<sup>48</sup> budget per search.</span></div>
+    </div>
+  </footer>
+
+</main>
+
+<dialog id="config">
+  <div class="config-box">
+    <div class="config-title">
+      <span class="micro">Config</span>
+      <button type="button" id="config-close" class="micro link">Close</button>
+    </div>
+    <div class="config-section">
+      <div class="micro dim">Duration</div>
+      <div class="config-row">
+        <input id="duration" type="number" min="0" step="1" value="120">
+        <span class="note">seconds the drawing should take &mdash; 0 renders the final state instantly</span>
+      </div>
+      <div class="config-row">
+        <input id="pause" type="number" min="0" step="1" value="60">
+        <span class="note">seconds to pause on the final state after each cycle &mdash; 0 runs once and stops</span>
+      </div>
+      <div class="config-row">
+        <input id="row-pause" type="number" min="0" step="1" value="2">
+        <span class="note">seconds of rest after each row locks &mdash; not after the last; 0 is none</span>
+      </div>
+    </div>
+    <div class="config-section">
+      <div class="micro dim">Layout</div>
+      <div class="opt-buttons" id="layout-buttons"></div>
+    </div>
+    <div class="config-section">
+      <div class="micro dim">Hash display</div>
+      <div class="opt-buttons" id="display-buttons"></div>
+    </div>
+    <div class="config-section">
+      <div class="micro dim">Element size</div>
+      <div class="opt-buttons" id="sizing-buttons"></div>
+      <div class="note">radial, rosette, and spiral only</div>
+    </div>
+    <div class="config-section">
+      <div class="micro dim">Scheme</div>
+      <div class="opt-buttons" id="scheme-buttons"></div>
+    </div>
+    <div class="config-section">
+      <div class="micro dim">Encoding</div>
+      <div class="opt-buttons" id="encoding-buttons"></div>
+      <div class="note">Cells <span class="mono" id="cell-count">&mdash;</span></div>
+    </div>
+    <div class="config-section">
+      <div class="micro dim">Export</div>
+      <div class="config-row">
+        <button type="button" id="save-frame" class="micro link">Save SVG &mdash; this frame</button>
+        <button type="button" id="save-final" class="micro link">Save SVG &mdash; final state</button>
+      </div>
+    </div>
+    <div class="config-section" id="chain-section" hidden>
+      <div class="micro dim">Chain</div>
+      <div class="config-row">
+        <button type="button" id="chain-save" class="micro link">Save config to chain</button>
+        <span class="note" id="chain-status">the token owner can store this display configuration on chain</span>
+      </div>
+      <div class="note" id="chain-tx" hidden></div>
+    </div>
+  </div>
+</dialog>
+
+<script src="js/colour.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/animation.js"></script>
+<script src="js/render.js"></script>
+<script src="js/artwork.js"></script>
+<script src="data/gender.js"></script>
+<script src="js/chain-config.js"></script>
+<script src="js/chain.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

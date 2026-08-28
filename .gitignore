@@ -6,3 +6,19 @@
 # Resume checkpoint (grind.state and its atomic-write temp)
 grind.state
 grind.state.tmp
+
+# Forge build output and the regenerable Etherscan bundle
+contract/cache/
+contract/out/
+contract/verify/
+
+# Local-chain rehearsal broadcasts (real-chain broadcasts stay committable
+# as the deployment record)
+contract/broadcast/*/31337/
+
+# Rehearsal browser harnesses (wallet shim and page copies)
+app/_*
+
+# The CAR is rebuilt by scripts/upload-ipfs.sh --car; ipfs-cids.env is the
+# committable record of what it contained
+grinding.car

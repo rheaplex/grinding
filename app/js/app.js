@@ -29,7 +29,7 @@
   // ---- defaults & tuning --------------------------------------------------
   const DEFAULTS = {
     layout: "gutter", encoding: "rgb12", display: "squares", sizing: "fit",
-    scheme: "paper", drawSeconds: 30, pauseSeconds: 7, rowPauseSeconds: 2
+    scheme: "paper", drawSeconds: 120, pauseSeconds: 60, rowPauseSeconds: 2
   };
   const DISPLAYS = [["squares", "squares"], ["circles", "circles"], ["hex", "hex"], ["ascii", "ascii text"]];
   const SIZINGS = [["fit", "fitted"], ["shrink", "shrink"], ["fill", "grow"], ["overlap", "overlap"]];
@@ -121,7 +121,9 @@
     $("cell-count").textContent = piece ? (piece.textual ? piece.glyphs : piece.cols) : "—";
   }
 
-  // visible at startup and on mouse move / tap; fades after 10s of quiet
+  // visible at startup and on mouse move / tap; fades after 10s of quiet.
+  // ?chrome=off removes it entirely — for capture, kiosks, and previews,
+  // where the plate is the whole composition
   const configBtn = $("config-open");
   let configHideTimer = null;
   function wakeConfig() {
@@ -129,9 +131,13 @@
     clearTimeout(configHideTimer);
     configHideTimer = setTimeout(() => configBtn.classList.add("faded"), CONFIG_FADE_MS);
   }
-  addEventListener("mousemove", wakeConfig);
-  addEventListener("touchstart", wakeConfig, { passive: true });
-  wakeConfig();
+  if (params.get("chrome") === "off") {
+    configBtn.style.display = "none";
+  } else {
+    addEventListener("mousemove", wakeConfig);
+    addEventListener("touchstart", wakeConfig, { passive: true });
+    wakeConfig();
+  }
 
   const dialog = $("config");
   $("config-open").addEventListener("click", () => dialog.showModal());
@@ -297,6 +303,84 @@
   put("total-hashes", fmt(totals.attempts));
 
   rebuild();
+
+  // ---- chain ---------------------------------------------------------------
+  // with an Ethereum plugin and a configured contract (chain-config.js), the
+  // token's stored display configuration fills in whatever the URL leaves
+  // unsaid — an explicit query parameter always wins — and the token's owner
+  // can write the current configuration back from the Config dialog. The
+  // contract enforces ownership; the page checks it first to say so plainly.
+  const chain = R.chain;
+  if (chain && chain.enabled()) {
+    chain.read().then(stored => {
+      if (!stored) return; // nothing written on chain yet
+      const sp = new URLSearchParams(stored.replace(/^\?/, ""));
+      const take = (key, allowed, apply) => {
+        if (params.has(key) || !sp.has(key)) return false;
+        const v = sp.get(key);
+        if (allowed && !allowed.includes(v)) return false;
+        apply(v);
+        return true;
+      };
+      const takeNumber = (key, apply) => take(key, null, v => apply(Number(v)));
+      let changed = false;
+      changed = take("layout", R.layout.layoutNames, v => { state.layout = v; }) || changed;
+      changed = take("encoding", encodingOrder, v => { state.encoding = v; }) || changed;
+      changed = take("display", DISPLAYS.map(d => d[0]), v => { state.display = v; }) || changed;
+      changed = take("size", SIZINGS.map(s => s[0]), v => { state.sizing = v; }) || changed;
+      changed = take("scheme", schemeOrder.map(s => s[0]), v => {
+        state.scheme = v;
+        document.body.className = "scheme-" + v;
+      }) || changed;
+      changed = takeNumber("duration", v => { state.drawSeconds = Math.max(0, v || 0); }) || changed;
+      changed = takeNumber("pause", v => { state.pauseSeconds = Math.max(0, v || 0); }) || changed;
+      changed = takeNumber("rowpause", v => { state.rowPauseSeconds = Math.max(0, v || 0); }) || changed;
+      if (changed) {
+        $("duration").value = state.drawSeconds;
+        $("pause").value = state.pauseSeconds;
+        $("row-pause").value = state.rowPauseSeconds;
+        rebuild();
+      }
+    }).catch(() => {}); // an unreachable chain loses the viewer nothing
+  }
+
+  const chainSection = $("chain-section");
+  if (chain && chain.enabled() && chainSection) {
+    chainSection.hidden = false;
+    const status = $("chain-status");
+    // the transaction hash gets its own full-width line at the bottom of the
+    // section; inline beside the button it forces the dialog wide open
+    const txLine = $("chain-tx");
+    const showTx = hash => {
+      if (!txLine) return;
+      txLine.textContent = hash;
+      txLine.hidden = false;
+    };
+    $("chain-save").addEventListener("click", async () => {
+      try {
+        if (txLine) txLine.hidden = true;
+        status.textContent = "connecting…";
+        const account = await chain.connect();
+        const owner = await chain.ownerOf();
+        if (owner.toLowerCase() !== account.toLowerCase()) {
+          status.textContent = "only the owner of token " + chain.tokenId() +
+            " may write; " + account.slice(0, 10) + "… does not own it";
+          return;
+        }
+        status.textContent = "confirm in the wallet…";
+        const tx = await chain.write(account, {
+          layout: state.layout, encoding: state.encoding, display: state.display,
+          sizing: state.sizing, scheme: state.scheme,
+          drawSeconds: state.drawSeconds, pauseSeconds: state.pauseSeconds,
+          rowPauseSeconds: state.rowPauseSeconds
+        });
+        status.textContent = "sent";
+        showTx(tx);
+      } catch (e) {
+        status.textContent = e && e.message ? e.message : "failed";
+      }
+    });
+  }
 
   // ?save=final (or a frame number) downloads that state once loaded
   const saveParam = params.get("save");

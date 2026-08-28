@@ -1,0 +1,56 @@
+{
+  "name": "Genre",
+  "description": "The genres of painting in a chain — myth down to thing. Proof-of-work text search: each candidate hashes the base “myth” with an incrementing counter appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word. Every hash shown was actually found, across 3,843,342,595,794 attempts. Number 7 of the 12 Grinding tokens.",
+  "external_url": "https://show.rhea.art/grinding/genre.html",
+  "attributes": [
+    {
+      "trait_type": "Work",
+      "value": "Genre"
+    },
+    {
+      "trait_type": "Base",
+      "value": "myth"
+    },
+    {
+      "trait_type": "Topology",
+      "value": "chain"
+    },
+    {
+      "trait_type": "Search Encoding",
+      "value": "ascii8"
+    },
+    {
+      "trait_type": "Hash Function",
+      "value": "SHA-256"
+    },
+    {
+      "trait_type": "Searches",
+      "value": "5"
+    },
+    {
+      "trait_type": "Matches",
+      "value": "23"
+    },
+    {
+      "trait_type": "Hashes",
+      "value": "3843342595794"
+    }
+  ],
+  "tags": [
+    "grinding",
+    "proof-of-work",
+    "hash",
+    "text",
+    "generative"
+  ],
+  "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/7.png",
+  "image_sha256": "442caf8861c546219d6bfbcb7f1c1959c1968eb1e15d221605ddfbe9f391dbe5",
+  "animation_url": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/genre.html",
+  "animation_sha256": "d5e03ee80e7b6c95a5cfc43b431fa39bf72a7c94ae41395a477834bec9f7b172",
+  "media": {
+    "uri": "ipfs://bafybeigbvtzgmj7cjfsfitif7sl2mohhr2g7ocm5wfntqq35m7nxuhflbu/genre.html",
+    "size": "4648",
+    "dimensions": "1920x1080",
+    "mimeType": "text/html"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "grinding-tokens",
+  "version": "1.0.0",
+  "description": "Asset pipeline and contract for the Grinding tokens",
+  "private": true,
+  "scripts": {
+    "previews": "node scripts/gen-previews.js",
+    "metadata": "node scripts/gen-metadata.js",
+    "upload": "scripts/upload-ipfs.sh",
+    "upload:dry-run": "scripts/upload-ipfs.sh --dry-run",
+    "test": "node --test 'scripts/test/*.test.js' && cd contract && forge test",
+    "test:scripts": "node --test 'scripts/test/*.test.js'",
+    "test:contract": "cd contract && forge test",
+    "verify:bundle": "cd contract && ./verify-bundle.sh"
+  }
+}
