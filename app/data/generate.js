@@ -399,6 +399,13 @@ function encodingNote(work) {
     (work.caseMode === "insensitive" ? " Matching is case-insensitive." : "");
 }
 
+// Marketplace embeds (SuperRare et al.) cache the animation HTML without its
+// sibling files, so every page is fully self-contained: the stylesheet and
+// all scripts are inlined at generation time. Interpolated file contents are
+// runtime strings, so backticks inside them are safe.
+const inlineCss = () => fs.readFileSync(path.join(APP, "css", "styles.css"), "utf8");
+const inlineJs = rel => fs.readFileSync(path.join(APP, rel), "utf8");
+
 function page(work) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -406,7 +413,8 @@ function page(work) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${work.name} — Grinding</title>
-<link rel="stylesheet" href="css/styles.css">
+<style>
+${inlineCss()}</style>
 </head>
 <body>
 
@@ -504,15 +512,11 @@ function page(work) {
   </div>
 </dialog>
 
-<script src="js/colour.js"></script>
-<script src="js/layout.js"></script>
-<script src="js/animation.js"></script>
-<script src="js/render.js"></script>
-<script src="js/artwork.js"></script>
-<script src="data/${work.slug}.js"></script>
-<script src="js/chain-config.js"></script>
-<script src="js/chain.js"></script>
-<script src="js/app.js"></script>
+<script>
+${["js/colour.js", "js/layout.js", "js/animation.js", "js/render.js",
+   "js/artwork.js", `data/${work.slug}.js`, "js/chain-config.js",
+   "js/chain.js", "js/app.js"].map(inlineJs).join("\n")}
+</script>
 
 </body>
 </html>
@@ -521,8 +525,21 @@ function page(work) {
 
 // ---- main ------------------------------------------------------------------
 
+// The index page is hand-edited, but its styles are inlined (it ships to
+// the site as a single file); refresh that block from styles.css each run.
+function refreshIndex() {
+  const p = path.join(APP, "index.html");
+  const s = fs.readFileSync(p, "utf8");
+  const out = s.replace(
+    /<style data-src="css\/styles.css">[\s\S]*?<\/style>/,
+    () => `<style data-src="css/styles.css">\n${inlineCss()}</style>`
+  );
+  if (out !== s) fs.writeFileSync(p, out);
+}
+
 (async () => {
   await collect();
+  refreshIndex();
   for (const w of works) {
     prune(w);
     verify(w);

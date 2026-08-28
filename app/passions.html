@@ -4,7 +4,332 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Passions — Grinding</title>
-<link rel="stylesheet" href="css/styles.css">
+<style>
+:root {
+  --ground: #ffffff;
+  --ink: #16161a;
+  --dim: #56544d;
+  --rule-soft: #e4e2dc;
+  --grid: #d5d2cb;
+  --magic: #d0281e;
+  --magic-weight: 400; /* video schemes mark significance with weight, not red */
+  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* ---- colour schemes: black-on-white is :root; the page sets a body class
+   and both the chrome and the drawing read these variables ---- */
+
+body.scheme-night {
+  --ground: #000000;
+  --ink: #ffffff;
+  --dim: #9a9891;
+  --rule-soft: #232326;
+  --grid: #3c3c42;
+  --magic: #ff3b30;
+}
+
+body.scheme-video {
+  --ground: #000000;
+  --ink: #33ff33;
+  --dim: #22aa22;
+  --rule-soft: #123f12;
+  --grid: #1c661c;
+  --magic: #7fff7f;
+  --magic-weight: 700;
+}
+
+body.scheme-inverse {
+  --ground: #33ff33;
+  --ink: #000000;
+  --dim: #0d660d;
+  --rule-soft: #29cc29;
+  --grid: #1fb31f;
+  --magic: #000000;
+  --magic-weight: 700;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--magic); }
+a:hover { color: var(--magic); }
+
+/* a fixed 16:9 composition, scaled to the window by app.js */
+.plate-page {
+  position: absolute;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  padding: 56px 72px;
+  display: flex;
+  flex-direction: column;
+}
+
+.micro {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+.mono { font-family: var(--mono); letter-spacing: 0; }
+.dim { color: var(--dim); }
+.link { color: var(--magic); font-weight: var(--magic-weight); }
+.link:hover { color: var(--ink); }
+
+/* ---- title block ---- */
+
+.titleblock {
+  display: grid;
+  grid-template-columns: 176px 1fr auto;
+  gap: 0 32px;
+  padding: 0 0 28px;
+  border-bottom: 1px solid var(--ink);
+}
+
+/* the kicker's last line shares the headline's baseline */
+.titleblock .kicker { grid-row: 1; align-self: last baseline; }
+
+.titleblock h1 {
+  grid-row: 1;
+  align-self: last baseline;
+  margin: 0;
+  font-size: 84px;
+  line-height: 0.9;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+.titleblock-actions { grid-row: 1; grid-column: 3; align-self: start; text-align: right; }
+
+/* the config button shows at startup and on activity, then fades away */
+#config-open { transition: opacity 1s ease; }
+#config-open.faded { opacity: 0; pointer-events: none; }
+
+.worktitle { font-weight: 700; font-style: italic; }
+
+/* ---- index: the list of works ---- */
+
+/* twelve works: two columns of six, read down each column */
+.works {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(6, auto);
+  grid-auto-flow: column;
+  column-gap: 72px;
+  align-content: center;
+}
+
+a.work {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 6px 20px;
+  align-items: baseline;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.work-title {
+  font-size: 38px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+a.work:hover .work-title { color: var(--magic); }
+
+.work-note { grid-column: 2; }
+
+/* ---- colophon ---- */
+
+.colophon {
+  border-top: 1px solid var(--ink);
+  padding-top: 20px;
+  margin-top: 28px;
+}
+
+.packages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.package { font-size: 12px; line-height: 1.6; }
+.package .name { font-family: var(--mono); }
+.package .note { color: var(--dim); }
+
+/* ---- config dialog ---- */
+
+dialog#config {
+  border: 1px solid var(--ink);
+  padding: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
+
+.config-box {
+  width: 480px;
+  max-width: 90vw;
+  padding: 26px 30px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.config-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 8px;
+}
+
+.config-section { display: flex; flex-direction: column; gap: 10px; }
+
+.config-row { display: flex; gap: 18px; align-items: baseline; }
+
+/* a transaction hash is wider than the dialog: its own line, broken anywhere */
+#chain-tx { font-family: var(--mono); word-break: break-all; }
+
+.note { font-size: 12px; color: var(--dim); line-height: 1.5; }
+
+#duration, #pause {
+  font-family: var(--mono);
+  font-size: 16px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 6px 10px;
+  width: 90px;
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.opt-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.opt-buttons button {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  border: 1px solid var(--ink);
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.opt-buttons button.active {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.opt-buttons button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---- stage ---- */
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr; /* telemetry hidden; was: 1fr 300px */
+  gap: 40px;
+  padding-top: 32px;
+}
+
+.host {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.host svg { width: 100%; height: 100%; display: block; }
+
+/* ---- telemetry ---- */
+
+.telemetry { display: flex; flex-direction: column; }
+
+.telemetry .head {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 8px;
+}
+
+.trow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--rule-soft);
+  padding: 12px 0;
+}
+
+.trow:last-of-type { border-bottom: 1px solid var(--ink); }
+
+.trow .label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.trow .value { font-family: var(--mono); font-size: 18px; }
+.trow .value.small { font-size: 13px; }
+.trow .value .u { color: var(--grid); }
+
+.totals { display: flex; flex-direction: column; gap: 10px; padding-top: 22px; }
+
+.totals .head-small {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.totals .row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.totals .row span:first-child { color: var(--dim); }
+.totals .row span:last-child { font-family: var(--mono); }
+
+#status {
+  margin-top: 22px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--magic);
+}
+
+#status.done { color: var(--ink); }
+</style>
 </head>
 <body>
 
@@ -98,15 +423,2407 @@
   </div>
 </dialog>
 
-<script src="js/colour.js"></script>
-<script src="js/layout.js"></script>
-<script src="js/animation.js"></script>
-<script src="js/render.js"></script>
-<script src="js/artwork.js"></script>
-<script src="data/passions.js"></script>
-<script src="js/chain-config.js"></script>
-<script src="js/chain.js"></script>
-<script src="js/app.js"></script>
+<script>
+// Colour package — hash nibbles to colour, and the churn stand-in.
+// Channels are clamped into FLOOR..CEIL so no figure ever meets a flat ground.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+
+  // channels clamp into floor..CEIL; a dark scheme raises the floor so
+  // zero bytes stay visible against a black ground
+  const FLOOR = 10, CEIL = 245;
+  const channel = (nibble, floor = FLOOR) => Math.round(floor + nibble * ((CEIL - floor) / 15));
+  const hex2 = v => v.toString(16).padStart(2, "0");
+  const rgb = (r, g, b) => "#" + hex2(r) + hex2(g) + hex2(b);
+
+  // named encodings: hash text -> array of colours
+  const encodings = {
+    // 12-bit colour, three nibbles per cell (21 cells from a 64-nibble hash)
+    rgb12: {
+      label: "12-bit RGB",
+      nibblesPerCell: 3,
+      cells: 21,
+      colour: (n, f) => rgb(channel(n[0], f), channel(n[1], f), channel(n[2], f))
+    },
+    // one nibble per cell, greyscale: 64 cells, the whole hash, nothing discarded
+    grey4: {
+      label: "4-bit grey",
+      nibblesPerCell: 1,
+      cells: 64,
+      colour: (n, f) => { const v = channel(n[0], f); return rgb(v, v, v); }
+    },
+    // two nibbles per cell mapped along one hue axis: 32 cells
+    duo8: {
+      label: "8-bit duotone",
+      nibblesPerCell: 2,
+      cells: 32,
+      colour: (n, f) => rgb(channel(n[0], f), channel((n[0] + n[1]) >> 1, f), channel(n[1], f))
+    }
+  };
+
+  function cellsFromHash(hash, encoding = "rgb12", floor = FLOOR) {
+    const e = typeof encoding === "string" ? encodings[encoding] : encoding;
+    const out = [];
+    for (let k = 0; k + e.nibblesPerCell <= hash.length && out.length < e.cells; k += e.nibblesPerCell) {
+      const nibbles = [];
+      for (let j = 0; j < e.nibblesPerCell; j++) nibbles.push(parseInt(hash[k + j], 16));
+      out.push(e.colour(nibbles, floor));
+    }
+    return out;
+  }
+
+  function xorshift(a) { a = a | 0; a ^= a << 13; a ^= a >>> 17; a ^= a << 5; return a >>> 0; }
+
+  // invented colours for the churn between matches — deterministic in the seed
+  function churnCells(seed, count, encoding = "rgb12", floor = FLOOR) {
+    const e = typeof encoding === "string" ? encodings[encoding] : encoding;
+    const out = [];
+    for (let k = 0; k < count; k++) {
+      const s = xorshift(Math.imul(seed + 1, 2654435761) + Math.imul(k + 7, 40503));
+      const nibbles = [];
+      for (let j = 0; j < e.nibblesPerCell; j++) nibbles.push((s >>> (j * 4)) & 15);
+      out.push(e.colour(nibbles, floor));
+    }
+    return out;
+  }
+
+  // invented hex digits for the churn between matches — deterministic in the seed
+  function churnHex(seed, count) {
+    let out = "";
+    for (let k = 0; k < count; k++) {
+      const s = xorshift(Math.imul(seed + 1, 2654435761) + Math.imul(k + 7, 40503));
+      out += (s & 15).toString(16);
+    }
+    return out;
+  }
+
+  grinding.colour = { FLOOR, CEIL, channel, encodings, cellsFromHash, churnCells, churnHex };
+})();
+
+// Layout package — arrangement only. Every layout returns the same model:
+//   { width, height, cells: [row][cell] -> primitive, furniture: [primitive], labels: [label] }
+// A primitive is { tag, attrs } ready for SVG. Nothing here knows about colour,
+// data or time: it is handed a row count and a cell count and returns geometry.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+
+  const P = (tag, attrs) => ({ tag, attrs });
+  const fx = n => Number(n.toFixed(2));
+
+  // ---- tuning constants ---------------------------------------------------
+
+  // every layout composes into the same 16:9 frame
+  const FRAME = { width: 1600, height: 900 };
+
+  // type metrics shared by every layout
+  const TYPE = {
+    word: 24,        // word label size
+    nonce: 18,       // nonce label size
+    baseline: 0.32,  // baseline offset as a fraction of font size
+    advance: 0.62,   // monospace glyph advance as a fraction of font size
+    linePitch: 1.15  // line spacing as a fraction of font size
+  };
+
+  // text-display rows
+  const TEXTROW = {
+    perLine: 32,     // glyphs per wrapped line (64 hex digits -> two lines)
+    pad: 16          // vertical padding inside a row
+  };
+
+  // the label columns of the row layouts (plate, honeycomb)
+  const COLUMNS = {
+    margin: 20,      // frame margin
+    wordW: 250,      // word column width
+    nonceW: 230,     // fits the longest formatted nonce at TYPE.nonce
+    gap: 24          // clearance between a label and the hash field
+  };
+
+  // callout labels (ring family, spiral)
+  const CALLOUT = {
+    x: 246,          // words end here; nonces start mirrored from the right
+    yTop: 70,        // first label y; the last mirrors it from the bottom
+    leadGap: 12,     // leader clearance from the label
+    slotGap: 1.6,    // minimum label spacing, in multiples of the label size
+    fanDegrees: 55   // tap fan: degrees above horizontal at the outermost band
+  };
+
+  // ring family (rings, hexRing)
+  const RINGS = {
+    inner: 62,          // innermost band radius
+    outerInset: 30,     // outermost radius = frame half-height minus this
+    bandGapOuter: 1,    // radial breathing at a band's outer edge...
+    bandGapInner: 2,    // ...and its inner edge
+    beadGap: 1.5,       // bead clearance within and between bands
+    textInset: 6,       // band text size cap = band thickness minus this
+    textBaseline: 0.35  // baseline radius inset as a fraction of text size
+  };
+
+  // arm family (radial, rosette)
+  const ARMS = {
+    inner: 50,          // arm root radius
+    outerInset: 85,     // tip radius = frame half-height minus this (label room)
+    widthShare: 0.72,   // arm angular width as a share of its slot
+    beadGap: 1,         // fitted bead clearance
+    cellGapIn: 1,       // radial breathing inside a fitted wedge...
+    cellGapOut: 2,      // ...top and bottom
+    minHalf: 1.5,       // smallest half-extent any element may shrink to
+    textSizeCap: 18,    // arm text size cap
+    samples: 28,        // path samples for a swept arm's text line
+    normalEps: 0.01,    // finite-difference step for the path normal
+    tipGap: 18,         // label distance beyond the tip
+    anchorCos: 0.35,    // |cos| beyond which tip labels anchor start/end
+    anchorSin: 0.2,     // |sin| beyond which tip labels lift or drop
+    wordLift: 26,       // tip label stacking offsets...
+    wordDrop: 18,
+    wordMid: 4,
+    nonceDrop: 24,
+    rosetteSweep: 1.26, // radians accumulated along a rosette arm
+    frameMargin: 10,    // fill mode: cell clearance from the frame edge
+    minFillScale: 0.05
+  };
+
+  // spiral
+  const SPIRAL = {
+    r0: 60,          // coil start radius
+    outerInset: 60,  // coil end radius = frame half-height minus this
+    loose: 2.2,      // winding: turn pitch = loose x cell/glyph size
+    runSpacing: 1.15,// cell spacing along the run, in cell sizes
+    gapChars: 2,     // breathing room between runs, in glyphs...
+    runGap: 1.2,     // ...and in cell sizes for the block modes
+    textSizeCap: 40,
+    walkStep: 9,     // arc-length step when walking the coil
+    minSide: 2.5     // smallest square side on the coil
+  };
+
+  // element sizing modes on the fanning layouts
+  const SIZING = {
+    taper: 0.7,           // shrink: fraction lost by the tip
+    overlapBead: 0.85,    // overlap: bead radius as a fraction of the step
+    overlapReach: 0.35,   // overlap: wedge radial overshoot
+    shrinkStart: 2.2,     // shrink: root bead radius as a fraction of the step
+    shrinkFloorPad: 0.5,  // shrink: overlap-guarantee padding
+    spiralShrinkFloor: 0.6, // shrink floor on the coil, in cell sizes
+    beadFit: 0.48,        // spiral cell factors, in cell sizes
+    beadFillShare: 0.46,  // (of the winding pitch)
+    sideFit: 0.78,
+    sideFill: 1.25,
+    sideOverlap: 1.5
+  };
+
+  // gutter
+  const GUTTER = {
+    x: 380,           // the gutter line: labels end left of it, field right
+    topWithHeader: 44,
+    top: 64,
+    bottom: 64,
+    fieldGap: 20,     // hash field starts this far right of the line
+    wordInset: 260,   // word labels end this far left of the line
+    nonceInset: 24,   // nonce labels end this far left of the line
+    cellGap: 2,
+    cellPad: 16,      // square side cap = row height minus this
+    ruleLift: 12      // top rule sits this far above the first row
+  };
+
+  // honeycomb
+  const COMB = {
+    vPad: 48,        // vertical bound for the comb's own sizing
+    insetScale: 6,   // hex inset = gap fraction x this
+    maxStretch: 2.2  // how far hexes may elongate vertically to use the height
+  };
+
+  // -------------------------------------------------------------------------
+
+  function polygonPoints(pts) {
+    return pts.map(p => fx(p[0]) + "," + fx(p[1])).join(" ");
+  }
+
+  // text-display rows: characters on a fixed grid across `region`, wrapping
+  // 64 hex digits into two lines of 32 on the same grid the ascii view uses
+  function textRowSpec(x0, region, glyphs, rowHeight, mid, display) {
+    const perLine = Math.min(glyphs, TEXTROW.perLine);
+    const lines = Math.ceil(glyphs / perLine);
+    const cw = region / perLine;
+    const size = Math.min(Math.round((rowHeight - TEXTROW.pad) / (lines * TYPE.linePitch)), Math.round(cw / TYPE.advance));
+    const pitch = size * TYPE.linePitch;
+    return {
+      x: fx(x0), size, cw, perLine,
+      // text rows show grey dots before the glyphs appear
+      placeholder: "·".repeat(glyphs),
+      baselines: Array.from({ length: lines }, (_, l) =>
+        fx(mid - pitch * (lines - 1) / 2 + l * pitch + size * TYPE.baseline))
+    };
+  }
+
+  // ---------------------------------------------------------------- plate
+  // a full-height mosaic row per search: word on the left, nonce on the
+  // right, the initial-value row first; animated exactly as the gutter is
+  function plate(rows, cols, o) {
+    const { width = FRAME.width, height = FRAME.height, gap = 0.06, header = null } = o;
+    const display = o.display || "squares"; // squares | circles | hex | ascii
+    const textual = display === "hex" || display === "ascii";
+    const glyphs = o.glyphs || 64; // characters per text row (64 hex, 32 ascii)
+    const wordSize = o.wordSize || TYPE.word, nonceSize = o.nonceSize || TYPE.nonce;
+    const x0 = COLUMNS.margin + COLUMNS.wordW, x1 = width - COLUMNS.margin - COLUMNS.nonceW;
+    const region = x1 - x0;
+    const slots = rows + (header ? 1 : 0);
+    const rowH = height / slots;
+    const w = region / cols, g = gap * w;
+    const cells = [], labels = [], furniture = [];
+    const textRows = textual ? [] : null;
+    const rowCells = top => {
+      const row = [];
+      for (let k = 0; k < cols; k++) {
+        if (display === "circles") {
+          const r = Math.min(w - 2 * g, rowH - 2 * g) / 2;
+          row.push(P("circle", { cx: fx(x0 + k * w + w / 2), cy: fx(top + rowH / 2), r: fx(r) }));
+        } else
+          row.push(P("rect", { x: fx(x0 + k * w + g), y: fx(top + g), width: fx(w - 2 * g), height: fx(rowH - 2 * g) }));
+      }
+      return row;
+    };
+    const rowLabels = (mid, spec) => {
+      const y = fx(mid + wordSize * TYPE.baseline);
+      // words right-aligned against the field, nonces left-aligned after it
+      labels.push({ ...spec.text, x: fx(x0 - COLUMNS.gap), y, anchor: "end", size: wordSize });
+      labels.push({ ...spec.nonce, x: fx(x1 + COLUMNS.gap), y, anchor: "start", size: nonceSize, mono: true });
+    };
+    let headerModel = null;
+    if (header) {
+      headerModel = textual ? { text: textRowSpec(x0, region, glyphs, rowH, rowH / 2, display) } : { cells: rowCells(0) };
+      rowLabels(rowH / 2, { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } });
+    }
+    for (let i = 0; i < rows; i++) {
+      const top = (i + (header ? 1 : 0)) * rowH;
+      if (textual) { cells.push([]); textRows.push(textRowSpec(x0, region, glyphs, rowH, top + rowH / 2, display)); }
+      else cells.push(rowCells(top));
+      rowLabels(top + rowH / 2, { text: { row: i, field: "plaintext" }, nonce: { row: i, field: "nonce" } });
+    }
+    return { width, height, cells, textRows, furniture, labels, header: headerModel, display };
+  }
+
+  // ------------------------------------------------- rings & hexRing
+  // one family: concentric bands with the initial value as the outermost,
+  // words called out left and nonces right with leader lines to their band.
+  // "squares" shows the native band segments; circles string beads along
+  // each band; hex/ascii run around the band on its path (with grey dot
+  // placeholders). A shape supplies the geometry:
+  //   point(cx, cy, r, t)  boundary point at parameter t (0 = top, clockwise)
+  //   perimeter(r)         boundary length at radius r
+  //   pathD(cx, cy, r)     the closed boundary path for text to ride
+  //   bandCells(...)       the native segment primitives for one band
+  function ringFamily(rows, cols, o, shape) {
+    const { width = FRAME.width, height = FRAME.height, inner = RINGS.inner, header = null } = o;
+    const display = o.display || "squares";
+    const textual = display === "hex" || display === "ascii";
+    const glyphs = o.glyphs || 64;
+    const outer = o.outer || height / 2 - RINGS.outerInset;
+    const wordSize = o.wordSize || TYPE.word, nonceSize = o.nonceSize || TYPE.nonce;
+    const cx = width / 2, cy = height / 2;
+    const bands = rows + (header ? 1 : 0);
+    const tr = (outer - inner) / bands;
+    const point = (r, t) => shape.point(cx, cy, r, t);
+    const bandCells = b => {
+      const ro = outer - b * tr - RINGS.bandGapOuter, ri = ro - tr + RINGS.bandGapInner;
+      const rm = outer - b * tr - tr / 2;
+      if (display === "circles") {
+        const bead = Math.min(tr / 2 - RINGS.beadGap, shape.perimeter(rm) / (2 * cols) - RINGS.beadGap);
+        const row = [];
+        for (let k = 0; k < cols; k++) {
+          const [bx, by] = point(rm, (k + 0.5) / cols);
+          row.push(P("circle", { cx: fx(bx), cy: fx(by), r: fx(bead) }));
+        }
+        return row;
+      }
+      return shape.bandCells(cx, cy, ro, ri, cols);
+    };
+    // text sized to the band's boundary so it shrinks inward, as beads do
+    const bandText = b => {
+      const rm = outer - b * tr - tr / 2;
+      const size = Math.min(Math.round(tr) - RINGS.textInset, Math.round(shape.perimeter(rm) / glyphs / TYPE.advance));
+      const br = rm - size * RINGS.textBaseline; // baseline sits inward: glyphs extend outward
+      return {
+        paths: [{ pathD: shape.pathD(cx, cy, br), id: shape.idPrefix + b }],
+        size, perLine: glyphs,
+        // text bands show grey dots before the glyphs appear
+        placeholder: "·".repeat(glyphs)
+      };
+    };
+    const cells = [], labels = [], overlays = [], furniture = [];
+    const textRows = textual ? [] : null;
+    // callouts: labels equally spaced down the available height, each band
+    // tapped at its mid radius, taps fanning from the upper boundary
+    // (outermost) to the horizontal (innermost)
+    const wordX = CALLOUT.x, nonceX = width - CALLOUT.x;
+    const yTop = CALLOUT.yTop, yStep = bands > 1 ? (height - 2 * CALLOUT.yTop) / (bands - 1) : 0;
+    const callout = (b, spec) => {
+      const rm = outer - b * tr - tr / 2;
+      const phi = bands > 1 ? CALLOUT.fanDegrees * (1 - b / (bands - 1)) : 0; // degrees above horizontal
+      const [lx, ly] = point(rm, 0.75 + phi / 360);
+      const [rx, ry] = point(rm, 0.25 - phi / 360);
+      const mid = yTop + b * yStep;
+      const y = fx(mid + wordSize * TYPE.baseline);
+      overlays.push(P("line", { x1: fx(wordX + CALLOUT.leadGap), y1: fx(mid), x2: fx(lx), y2: fx(ly), stroke: "gridline" }));
+      overlays.push(P("line", { x1: fx(nonceX - CALLOUT.leadGap), y1: fx(mid), x2: fx(rx), y2: fx(ry), stroke: "gridline" }));
+      labels.push({ ...spec.text, x: wordX, y, anchor: "end", size: wordSize });
+      labels.push({ ...spec.nonce, x: nonceX, y, anchor: "start", size: nonceSize, mono: true });
+    };
+    let headerModel = null;
+    const offset = header ? 1 : 0;
+    if (header) {
+      headerModel = textual ? { text: bandText(0) } : { cells: bandCells(0) };
+      callout(0, { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } });
+    }
+    for (let i = 0; i < rows; i++) {
+      if (textual) { cells.push([]); textRows.push(bandText(i + offset)); }
+      else cells.push(bandCells(i + offset));
+      callout(i + offset, { text: { row: i, field: "plaintext" }, nonce: { row: i, field: "nonce" } });
+    }
+    return { width, height, cells, textRows, furniture, overlays, labels, header: headerModel, display };
+  }
+
+  const circleShape = {
+    idPrefix: "ring-text-",
+    point: (cx, cy, r, t) => {
+      const a = -Math.PI / 2 + t * Math.PI * 2;
+      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    },
+    perimeter: r => 2 * Math.PI * r,
+    pathD: (cx, cy, r) =>
+      "M " + fx(cx) + " " + fx(cy - r) +
+      " A " + fx(r) + " " + fx(r) + " 0 1 1 " + fx(cx) + " " + fx(cy + r) +
+      " A " + fx(r) + " " + fx(r) + " 0 1 1 " + fx(cx) + " " + fx(cy - r),
+    bandCells: (cx, cy, ro, ri, cols) => {
+      const pt = (r, a) => fx(cx + Math.cos(a) * r) + " " + fx(cy + Math.sin(a) * r);
+      const row = [];
+      for (let k = 0; k < cols; k++) {
+        const a0 = -Math.PI / 2 + (k / cols) * Math.PI * 2;
+        const a1 = -Math.PI / 2 + ((k + 1) / cols) * Math.PI * 2;
+        row.push(P("path", {
+          d: "M " + pt(ro, a0) + " A " + fx(ro) + " " + fx(ro) + " 0 0 1 " + pt(ro, a1) +
+             " L " + pt(ri, a1) + " A " + fx(ri) + " " + fx(ri) + " 0 0 0 " + pt(ri, a0) + " Z"
+        }));
+      }
+      return row;
+    }
+  };
+
+  function hexBoundaryPoint(cx, cy, r, t) {
+    t = ((t % 1) + 1) % 1;
+    const seg = t * 6, n = Math.floor(seg) % 6, f = seg - Math.floor(seg);
+    const a0 = -Math.PI / 2 + n * Math.PI / 3, a1 = a0 + Math.PI / 3;
+    const x0 = Math.cos(a0) * r, y0 = Math.sin(a0) * r;
+    const x1 = Math.cos(a1) * r, y1 = Math.sin(a1) * r;
+    return [cx + x0 + (x1 - x0) * f, cy + y0 + (y1 - y0) * f];
+  }
+
+  function hexSpan(cx, cy, r, t0, t1) {
+    const pts = [hexBoundaryPoint(cx, cy, r, t0)];
+    for (let c = Math.ceil(t0 * 6); c < t1 * 6 - 1e-9; c++) pts.push(hexBoundaryPoint(cx, cy, r, c / 6));
+    pts.push(hexBoundaryPoint(cx, cy, r, t1));
+    return pts;
+  }
+
+  const hexShape = {
+    idPrefix: "hexring-text-",
+    point: hexBoundaryPoint,
+    perimeter: r => 6 * r,
+    pathD: (cx, cy, r) =>
+      "M " + polygonPoints(Array.from({ length: 6 }, (_, k) => hexBoundaryPoint(cx, cy, r, k / 6))).replace(/ /g, " L ") + " Z",
+    bandCells: (cx, cy, ro, ri, cols) => {
+      const row = [];
+      for (let k = 0; k < cols; k++)
+        row.push(P("polygon", {
+          points: polygonPoints(hexSpan(cx, cy, ro, k / cols, (k + 1) / cols)
+            .concat(hexSpan(cx, cy, ri, k / cols, (k + 1) / cols).reverse()))
+        }));
+      return row;
+    }
+  };
+
+  const rings = (rows, cols, o) => ringFamily(rows, cols, o, circleShape);
+  const hexRing = (rows, cols, o) => ringFamily(rows, cols, o, hexShape);
+
+  // ---------------------------------------------------------------- honeycomb
+  // a comb row per search between a word column left and a nonce column
+  // right, the initial-value row first; animated exactly as the plate is
+  function honeycomb(rows, cols, o) {
+    const { width = FRAME.width, height = FRAME.height, header = null } = o;
+    // "squares" shows the native hex mosaic (honeycomb's block form);
+    // circles pack at the hex centres; hex/ascii are the shared text rows
+    const display = o.display || "squares";
+    const textual = display === "hex" || display === "ascii";
+    const glyphs = o.glyphs || 64;
+    const wordSize = o.wordSize || TYPE.word, nonceSize = o.nonceSize || TYPE.nonce;
+    const x0 = COLUMNS.margin + COLUMNS.wordW, x1 = width - COLUMNS.margin - COLUMNS.nonceW;
+    const region = x1 - x0;
+    const slots = rows + (header ? 1 : 0);
+    const cells = [], labels = [], furniture = [];
+    const textRows = textual ? [] : null;
+    const rowLabels = (cyRow, spec) => {
+      const y = fx(cyRow + wordSize * TYPE.baseline);
+      // words right-aligned against the comb, nonces left-aligned after it
+      labels.push({ ...spec.text, x: fx(x0 - COLUMNS.gap), y, anchor: "end", size: wordSize });
+      labels.push({ ...spec.nonce, x: fx(x1 + COLUMNS.gap), y, anchor: "start", size: nonceSize, mono: true });
+    };
+    let headerModel = null;
+    const offset = header ? 1 : 0;
+    if (textual) {
+      // text has no cell shape: rows take even slots the full height
+      const rowH = height / slots;
+      const mid = s => s * rowH + rowH / 2;
+      if (header) {
+        headerModel = { text: textRowSpec(x0, region, glyphs, rowH, mid(0), display) };
+        rowLabels(mid(0), { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } });
+      }
+      for (let i = 0; i < rows; i++) {
+        cells.push([]);
+        textRows.push(textRowSpec(x0, region, glyphs, rowH, mid(i + offset), display));
+        rowLabels(mid(i + offset), { text: { row: i, field: "plaintext" }, nonce: { row: i, field: "nonce" } });
+      }
+      return { width, height, cells, textRows, furniture, labels, header: headerModel, display };
+    }
+    // the comb sizes itself to the width, then the hexes stretch vertically
+    // (up to COMB.maxStretch) so the mesh uses the available height
+    const rFromW = region / (cols + 0.5) / Math.sqrt(3);
+    const rFromH = (height - COMB.vPad) / ((slots - 1) * 1.5 + 2);
+    const rh = Math.min(rFromW, rFromH);
+    const stretch = Math.max(1, Math.min(COMB.maxStretch, rFromH / rh));
+    const rv = rh * stretch;
+    const w = rh * Math.sqrt(3), pitch = 1.5 * rv;
+    const xLeft = x0 + (region - w * (cols + 0.5)) / 2;
+    const yTop = (height - ((slots - 1) * pitch + 2 * rv)) / 2 + rv;
+    const inset = (o.gap ?? 0.06) * COMB.insetScale;
+    const rowY = s => yTop + s * pitch;
+    const hexRow = s => {
+      const row = [];
+      for (let k = 0; k < cols; k++) {
+        const hx = xLeft + w / 2 + k * w + (s % 2 ? w / 2 : 0), hy = rowY(s);
+        if (display === "circles") {
+          row.push(P("circle", { cx: fx(hx), cy: fx(hy), r: fx(rh - inset) }));
+          continue;
+        }
+        const pts = Array.from({ length: 6 }, (_, n) => {
+          const a = -Math.PI / 2 + n * Math.PI / 3;
+          return [hx + Math.cos(a) * (rh - inset), hy + Math.sin(a) * (rv - inset * stretch)];
+        });
+        row.push(P("polygon", { points: polygonPoints(pts) }));
+      }
+      return row;
+    };
+    if (header) {
+      headerModel = { cells: hexRow(0) };
+      rowLabels(rowY(0), { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } });
+    }
+    for (let i = 0; i < rows; i++) {
+      cells.push(hexRow(i + offset));
+      rowLabels(rowY(i + offset), { text: { row: i, field: "plaintext" }, nonce: { row: i, field: "nonce" } });
+    }
+    return { width, height, cells, furniture, labels, header: headerModel, display };
+  }
+
+  // ------------------------------------------------- radial & rosette
+  // one figure: each search a single arm out from the centre, cells running
+  // root to tip; the initial value's arm starts at 12 o'clock and the words
+  // follow clockwise. Labels sit just beyond each arm's tip. `sweep` is the
+  // rotation accumulated along an arm: 0 gives straight asterisk arms
+  // (radial); a nonzero sweep turns each successive element slightly further
+  // around the centre, curling the arms into a rosette.
+  // "squares" shows wedge segments; circles string beads up the arm;
+  // hex/ascii run along the arm's path (hex as two parallel lines of 32).
+  function armFamily(rows, cols, o, sweep, idPrefix) {
+    const { width = FRAME.width, height = FRAME.height, inner = ARMS.inner, header = null } = o;
+    const display = o.display || "squares";
+    const textual = display === "hex" || display === "ascii";
+    const glyphs = o.glyphs || 64;
+    const wordSize = o.wordSize || TYPE.word, nonceSize = o.nonceSize || TYPE.nonce;
+    const cx = width / 2, cy = height / 2;
+    const arms = rows + (header ? 1 : 0);
+    const cells = [], labels = [], furniture = [];
+    let headerModel = null;
+    const offset = header ? 1 : 0;
+    const outer = o.outer || height / 2 - ARMS.outerInset;
+    const step = (outer - inner) / cols;
+    const hw = (Math.PI / arms) * ARMS.widthShare; // arm angular halfwidth
+    const pt = (r, a) => fx(cx + Math.cos(a) * r) + " " + fx(cy + Math.sin(a) * r);
+    const armAngle = a => -Math.PI / 2 + (a / arms) * Math.PI * 2;
+    // the arm's centreline: t in 0..1 from root to tip, angle turning with t
+    const along = (a, t) => {
+      const th = armAngle(a) + t * sweep;
+      const r = inner + t * (outer - inner);
+      return [cx + Math.cos(th) * r, cy + Math.sin(th) * r, th, r];
+    };
+    // text along the arm, root to tip, so matched prefixes radiate from the
+    // centre exactly as the matched cells do
+    const textRows = textual ? [] : null;
+    const armText = a => {
+      const perLine = Math.min(glyphs, TEXTROW.perLine);
+      const linesN = Math.ceil(glyphs / perLine);
+      const size = Math.min(ARMS.textSizeCap, Math.round((outer - inner) / perLine / TYPE.advance));
+      const pitch = size * TYPE.linePitch;
+      const SAMPLES = sweep ? ARMS.samples : 1;
+      const paths = Array.from({ length: linesN }, (_, l) => {
+        const off = (l - (linesN - 1) / 2) * pitch;
+        const pts = [];
+        for (let n = 0; n <= SAMPLES; n++) {
+          const t = n / SAMPLES;
+          const [x, y] = along(a, t);
+          // offset along the local normal so lines stay parallel
+          const [x1, y1] = along(a, Math.min(1, t + ARMS.normalEps));
+          const [x0, y0] = along(a, Math.max(0, t - ARMS.normalEps));
+          const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+          pts.push([x - dy / len * off, y + dx / len * off]);
+        }
+        return {
+          pathD: "M " + pts.map(p => fx(p[0]) + " " + fx(p[1])).join(" L "),
+          id: idPrefix + a + "-" + l
+        };
+      });
+      return { paths, size, perLine, placeholder: "·".repeat(glyphs) };
+    };
+    // sizing: "fit" keeps elements inside their slot; "fill" grows them into
+    // the room that opens as the arms fan out; "overlap" starts them large so
+    // they shingle along the arm, as the original rosettes' petals did;
+    // "shrink" starts them larger still and tapers them towards the tip
+    const sizing = o.sizing || "fit";
+    const taper = t => 1 - SIZING.taper * t;
+    const armCells = a => {
+      const row = [];
+      // fill: grow with the fan, scaled uniformly per arm so the tip stays
+      // inside the frame while remaining the arm's largest element
+      let fillScale = 1;
+      if (sizing === "fill" && display === "circles")
+        for (let k = 0; k < cols; k++) {
+          const rm = inner + (k + 0.5) * step;
+          const th = armAngle(a) + ((k + 0.5) / cols) * sweep;
+          const x = cx + Math.cos(th) * rm, y = cy + Math.sin(th) * rm;
+          const room = rm * Math.sin(hw) - ARMS.beadGap;
+          const limit = Math.min(x, width - x, y, height - y) - ARMS.frameMargin;
+          if (room > 0 && limit < room) fillScale = Math.min(fillScale, Math.max(ARMS.minFillScale, limit / room));
+        }
+      for (let k = 0; k < cols; k++) {
+        const t = (k + 0.5) / cols;
+        const rm = inner + (k + 0.5) * step;
+        const th = armAngle(a) + t * sweep;
+        if (display === "circles") {
+          const room = rm * Math.sin(hw) - ARMS.beadGap; // tangential room to the next arm
+          const bead = sizing === "fill" ? room * fillScale
+            : sizing === "overlap" ? step * SIZING.overlapBead
+            // shrink: big at the root, tapering out, but never so small that
+            // neighbouring beads on the arm stop overlapping — the floor is
+            // half the true centre distance, sweep included
+            : sizing === "shrink" ? Math.max(Math.hypot(step, (sweep / cols) * rm) / 2 + SIZING.shrinkFloorPad, step * SIZING.shrinkStart * taper(t))
+            : Math.min(step / 2 - ARMS.beadGap, room);
+          row.push(P("circle", { cx: fx(cx + Math.cos(th) * rm), cy: fx(cy + Math.sin(th) * rm), r: fx(bead) }));
+          continue;
+        }
+        if (sizing === "shrink") {
+          const he = Math.max(ARMS.minHalf, (step / 2 - ARMS.beadGap) * taper(t));
+          const hwK = hw * taper(t);
+          row.push(P("path", {
+            d: "M " + pt(rm + he, th - hwK) + " A " + fx(rm + he) + " " + fx(rm + he) + " 0 0 1 " + pt(rm + he, th + hwK) +
+               " L " + pt(rm - he, th + hwK) + " A " + fx(rm - he) + " " + fx(rm - he) + " 0 0 0 " + pt(rm - he, th - hwK) + " Z"
+          }));
+          continue;
+        }
+        const reach = sizing === "overlap" ? step * SIZING.overlapReach : 0;
+        const ri = inner + k * step + (sizing === "fit" ? ARMS.cellGapIn : 0) - reach;
+        const ro = inner + (k + 1) * step - (sizing === "fit" ? ARMS.cellGapOut : 0) + reach;
+        row.push(P("path", {
+          d: "M " + pt(ro, th - hw) + " A " + fx(ro) + " " + fx(ro) + " 0 0 1 " + pt(ro, th + hw) +
+             " L " + pt(ri, th + hw) + " A " + fx(ri) + " " + fx(ri) + " 0 0 0 " + pt(ri, th - hw) + " Z"
+        }));
+      }
+      return row;
+    };
+    // tip labels: word over nonce, anchored away from the figure, at the
+    // angle the arm has swept to by its tip
+    const armLabels = (a, spec) => {
+      const th = armAngle(a) + sweep;
+      const c = Math.cos(th), s = Math.sin(th);
+      const bx = fx(cx + c * (outer + ARMS.tipGap)), by = cy + s * (outer + ARMS.tipGap);
+      const anchor = c > ARMS.anchorCos ? "start" : c < -ARMS.anchorCos ? "end" : "middle";
+      const wordY = s < -ARMS.anchorSin ? by - ARMS.wordLift : s > ARMS.anchorSin ? by + ARMS.wordDrop : by - ARMS.wordMid;
+      labels.push({ ...spec.text, x: bx, y: fx(wordY), anchor, size: wordSize });
+      labels.push({ ...spec.nonce, x: bx, y: fx(wordY + ARMS.nonceDrop), anchor, size: nonceSize, mono: true });
+    };
+    if (header) {
+      headerModel = textual ? { text: armText(0) } : { cells: armCells(0) };
+      armLabels(0, { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } });
+    }
+    for (let i = 0; i < rows; i++) {
+      if (textual) { cells.push([]); textRows.push(armText(i + offset)); }
+      else cells.push(armCells(i + offset));
+      armLabels(i + offset, { text: { row: i, field: "plaintext" }, nonce: { row: i, field: "nonce" } });
+    }
+    return { width, height, cells, textRows, furniture, labels, header: headerModel, display };
+  }
+
+  const radial = (rows, cols, o) => armFamily(rows, cols, o, 0, "radial-text-");
+  // the sketch's rosette twist, accumulated along the whole arm; the curl
+  // runs counterclockwise so no arm count reads as a swastika
+  const rosette = (rows, cols, o) => armFamily(rows, cols, o, -(o.sweep ?? ARMS.rosetteSweep), "rosette-text-");
+
+  // ---------------------------------------------------------------- spiral
+  // one spiral: every cell of every search sits on a single archimedean
+  // coil, the initial value innermost, each word a consecutive run growing
+  // outward. hex/ascii flow the text along the same coil, one run per
+  // search. Words are called out left (leader to the run's first cell) and
+  // nonces right (to its last).
+  function spiral(rows, cols, o) {
+    const { width = FRAME.width, height = FRAME.height, header = null } = o;
+    const display = o.display || "squares";
+    const textual = display === "hex" || display === "ascii";
+    const glyphs = o.glyphs || 64;
+    const wordSize = o.wordSize || TYPE.word, nonceSize = o.nonceSize || TYPE.nonce;
+    const cx = width / 2, cy = height / 2;
+    const bands = rows + (header ? 1 : 0);
+    const R = o.outer || height / 2 - SPIRAL.outerInset;
+    const cells = [], labels = [], overlays = [], furniture = [];
+    const textRows = textual ? [] : null;
+    const wordX = CALLOUT.x, nonceX = width - CALLOUT.x;
+    const yTop = CALLOUT.yTop;
+    // callouts are collected during the walk and placed afterwards: each
+    // label sits level with its own tap point on the coil (nudged apart to a
+    // minimum gap), so the leader lines fan out without crossing
+    const callouts = [];
+    const callout = (b, spec, from, to) => callouts.push({ spec, from, to });
+    const placeCallouts = () => {
+      const gap = Math.max(wordSize, nonceSize) * CALLOUT.slotGap;
+      const lo = yTop, hi = height - yTop;
+      // strict segment intersection, for the leader-uncrossing pass
+      const orient = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const crossing = (a1, a2, b1, b2) => {
+        const d1 = orient(b1, b2, a1), d2 = orient(b1, b2, a2);
+        const d3 = orient(a1, a2, b1), d4 = orient(a1, a2, b2);
+        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+               ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+      };
+      // Slot ys are the least-squares fit to the taps: minimise the total
+      // squared label-to-tap offset subject to the minimum gap. Shifting
+      // slot k by -k·gap turns the gap constraint into "non-decreasing",
+      // which pool-adjacent-violators solves exactly — so labels centre on
+      // their tap clusters (shortest, straightest leaders) instead of
+      // trailing below them. Then labels swap slots until no two leaders
+      // cross — each swap shortens the pair (triangle inequality), so the
+      // loop terminates.
+      const layoutSide = (taps, leadX) => {
+        const order = taps.map((t, i) => i).sort((a, b) => taps[a][1] - taps[b][1]);
+        const pools = [];
+        order.forEach((i, k) => {
+          let cur = { sum: taps[i][1] - k * gap, n: 1 };
+          while (pools.length && pools[pools.length - 1].sum / pools[pools.length - 1].n >= cur.sum / cur.n) {
+            const p = pools.pop();
+            cur = { sum: p.sum + cur.sum, n: p.n + cur.n };
+          }
+          pools.push(cur);
+        });
+        const slotYs = [];
+        for (const p of pools) {
+          for (let i = 0; i < p.n; i++) slotYs.push(p.sum / p.n + slotYs.length * gap);
+        }
+        // clamp into the column, preserving the gaps
+        let prev = -Infinity;
+        for (let k = 0; k < slotYs.length; k++) {
+          slotYs[k] = Math.max(slotYs[k], lo, prev + gap);
+          prev = slotYs[k];
+        }
+        let next = Infinity;
+        for (let k = slotYs.length - 1; k >= 0; k--) {
+          slotYs[k] = Math.min(slotYs[k], hi, next - gap);
+          next = slotYs[k];
+        }
+        for (let pass = 0, swapped = true; swapped && pass < order.length; pass++) {
+          swapped = false;
+          for (let a = 0; a < order.length; a++) {
+            for (let b = a + 1; b < order.length; b++) {
+              if (crossing([leadX, slotYs[a]], taps[order[a]], [leadX, slotYs[b]], taps[order[b]])) {
+                [order[a], order[b]] = [order[b], order[a]];
+                swapped = true;
+              }
+            }
+          }
+        }
+        const pos = new Array(taps.length);
+        order.forEach((ci, k) => { pos[ci] = slotYs[k]; });
+        return pos;
+      };
+      const wordYs = layoutSide(callouts.map(c => c.from), wordX + CALLOUT.leadGap);
+      const nonceYs = layoutSide(callouts.map(c => c.to), nonceX - CALLOUT.leadGap);
+      callouts.forEach((c, i) => {
+        overlays.push(P("line", { x1: fx(wordX + CALLOUT.leadGap), y1: fx(wordYs[i]), x2: fx(c.from[0]), y2: fx(c.from[1]), stroke: "gridline" }));
+        overlays.push(P("line", { x1: fx(nonceX - CALLOUT.leadGap), y1: fx(nonceYs[i]), x2: fx(c.to[0]), y2: fx(c.to[1]), stroke: "gridline" }));
+        labels.push({ ...c.spec.text, x: wordX, y: fx(wordYs[i] + wordSize * TYPE.baseline), anchor: "end", size: wordSize });
+        labels.push({ ...c.spec.nonce, x: nonceX, y: fx(nonceYs[i] + wordSize * TYPE.baseline), anchor: "start", size: nonceSize, mono: true });
+      });
+    };
+    const bandSpec = b => (header && b === 0)
+      ? { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } }
+      : { text: { row: b - (header ? 1 : 0), field: "plaintext" }, nonce: { row: b - (header ? 1 : 0), field: "nonce" } };
+    let headerModel = null;
+    // one archimedean coil for everything. SPIRAL.loose sets the winding:
+    // turn pitch = loose x the cell/glyph size, so runs sweep outward as
+    // open arms instead of closing into rings.
+    const r0 = SPIRAL.r0;
+    const mkWalker = pitch => {
+      const bc = pitch / (2 * Math.PI);
+      let theta = r0 / bc;
+      const phase = -Math.PI / 2 - theta; // the spiral starts at 12 o'clock
+      const at = () => [cx + Math.cos(theta + phase) * bc * theta, cy + Math.sin(theta + phase) * bc * theta];
+      const advance = dist => {
+        const pts = [];
+        let remaining = dist;
+        while (remaining > 0) {
+          const step = Math.min(remaining, SPIRAL.walkStep);
+          theta += step / (bc * theta);
+          remaining -= step;
+          pts.push(at());
+        }
+        return pts;
+      };
+      return { at, advance };
+    };
+    if (textual) {
+      // glyph size solved so all runs just fill the loose spiral
+      const totalChars = bands * (glyphs + SPIRAL.gapChars);
+      const size = Math.min(SPIRAL.textSizeCap, Math.round(Math.sqrt(Math.PI * (R * R - r0 * r0) / (SPIRAL.loose * TYPE.advance * totalChars))));
+      const charW = size * TYPE.advance;
+      const walk = mkWalker(size * SPIRAL.loose);
+      for (let b = 0; b < bands; b++) {
+        const start = walk.at();
+        const pts = [start, ...walk.advance(glyphs * charW)];
+        const spec = {
+          paths: [{ pathD: "M " + pts.map(p => fx(p[0]) + " " + fx(p[1])).join(" L "), id: "spiral-text-" + b }],
+          size, perLine: glyphs, placeholder: "·".repeat(glyphs)
+        };
+        if (header && b === 0) headerModel = { text: spec };
+        else { cells.push([]); textRows.push(spec); }
+        callout(b, bandSpec(b), start, pts[pts.length - 1]);
+        walk.advance(SPIRAL.gapChars * charW); // breathing room before the next run
+      }
+      placeCallouts();
+    } else {
+      // cell size solved the same way: N cells at their run spacing fill it
+      const N = bands * cols;
+      const d = Math.sqrt(Math.PI * (R * R - r0 * r0) / (SPIRAL.loose * SPIRAL.runSpacing * N));
+      const space = d * SPIRAL.runSpacing;
+      // sizing: "fill" plumps cells into the inter-winding gap; "overlap"
+      // shingles them along the run, as the original rosettes' petals did;
+      // "shrink" starts large and tapers as the coil winds out
+      const sizing = o.sizing || "fit";
+      const beadR = sizing === "fill" ? d * SPIRAL.loose * SIZING.beadFillShare
+        : sizing === "overlap" ? d * SIZING.overlapBead
+        : sizing === "shrink" ? d * SIZING.shrinkStart
+        : d * SIZING.beadFit;
+      const side = sizing === "fill" ? d * SIZING.sideFill : sizing === "overlap" ? d * SIZING.sideOverlap : d * SIZING.sideFit;
+      const taper = t => 1 - SIZING.taper * t;
+      const tOf = (sx, sy) => Math.min(1, Math.max(0, (Math.hypot(sx - cx, sy - cy) - r0) / (R - r0)));
+      const walk = mkWalker(d * SPIRAL.loose);
+      for (let b = 0; b < bands; b++) {
+        const row = [], run = [];
+        for (let k = 0; k < cols; k++) {
+          walk.advance(space / 2);
+          const [sx, sy] = walk.at();
+          walk.advance(space / 2);
+          run.push([sx, sy]);
+          const s = sizing === "shrink" ? taper(tOf(sx, sy)) : 1;
+          // shrink keeps neighbouring cells on the run overlapping
+          const floor = sizing === "shrink" ? d * SIZING.spiralShrinkFloor : ARMS.minHalf;
+          if (display === "circles") row.push(P("circle", { cx: fx(sx), cy: fx(sy), r: fx(Math.max(floor, beadR * s)) }));
+          else {
+            const sd = Math.max(SPIRAL.minSide, side * s);
+            row.push(P("rect", { x: fx(sx - sd / 2), y: fx(sy - sd / 2), width: fx(sd), height: fx(sd) }));
+          }
+        }
+        if (header && b === 0) headerModel = { cells: row };
+        else cells.push(row);
+        callout(b, bandSpec(b), run[0], run[run.length - 1]);
+        walk.advance(d * SPIRAL.runGap); // breathing room before the next run
+      }
+      placeCallouts();
+    }
+    return { width, height, cells, textRows, furniture, overlays, labels, header: headerModel, display };
+  }
+
+  // ---------------------------------------------------------------- gutter
+  // text on the left of a centre gutter, colour on the right
+  function gutter(rows, cols, o) {
+    const { width = FRAME.width, height = FRAME.height, cellGap = GUTTER.cellGap, header = null } = o;
+    const display = o.display || "squares"; // squares | circles | hex | ascii
+    const textual = display === "hex" || display === "ascii";
+    const glyphs = o.glyphs || 64; // characters per text row (64 hex, 32 ascii)
+    // the header row (the initial value) uses the top band, not left empty
+    const top = o.top ?? (header ? GUTTER.topWithHeader : GUTTER.top);
+    const wordSize = o.wordSize || TYPE.word, nonceSize = o.nonceSize || TYPE.nonce;
+    const slots = rows + (header ? 1 : 0);
+    const rowHeight = (height - top - GUTTER.bottom) / slots;
+    // words and nonces left of the gutter; the hash field takes all the
+    // width to the right of it.
+    // GUTTER.x is the x of the gutter line: the label column ends just left
+    // of it and the hash field starts GUTTER.fieldGap right of it. Widen it
+    // for a series with longer words or bigger label type; the hash field
+    // gives up exactly what the labels gain.
+    const gutterX = o.gutterX || GUTTER.x;
+    const x0 = gutterX + GUTTER.fieldGap;
+    const region = width - COLUMNS.margin - x0;
+    const side = Math.min((region - cellGap * (cols - 1)) / cols, rowHeight - GUTTER.cellPad); // square cells
+    // the word|nonce divider mirrors the nonce|hash gutter line: each label
+    // column ends GUTTER.nonceInset left of its bar
+    const wordBarX = gutterX - GUTTER.wordInset + GUTTER.nonceInset;
+    const cells = [], labels = [], furniture = [
+      P("line", { x1: fx(gutterX), y1: fx(top - GUTTER.ruleLift), x2: fx(gutterX), y2: fx(top + slots * rowHeight), stroke: "soft" }),
+      P("line", { x1: fx(wordBarX), y1: fx(top - GUTTER.ruleLift), x2: fx(wordBarX), y2: fx(top + slots * rowHeight), stroke: "soft" })
+    ];
+    const rowCells = mid => {
+      const row = [];
+      for (let k = 0; k < cols; k++) {
+        const x = x0 + k * (side + cellGap);
+        row.push(display === "circles"
+          ? P("circle", { cx: fx(x + side / 2), cy: fx(mid), r: fx(side / 2) })
+          : P("rect", { x: fx(x), y: fx(mid - side / 2), width: fx(side), height: fx(side) }));
+      }
+      return row;
+    };
+    const textRow = mid => textRowSpec(x0, region, glyphs, rowHeight, mid, display);
+    const textRows = textual ? [] : null;
+    const rowLabels = (mid, spec) => {
+      const y = fx(mid + wordSize * TYPE.baseline);
+      labels.push({ ...spec.text, x: gutterX - GUTTER.wordInset, y, anchor: "end", size: wordSize });
+      labels.push({ ...spec.nonce, x: gutterX - GUTTER.nonceInset, y, anchor: "end", size: nonceSize, mono: true });
+    };
+    let headerModel = null;
+    if (header) {
+      const mid = top + rowHeight / 2;
+      furniture.push(P("line", { x1: COLUMNS.margin, y1: fx(mid + rowHeight / 2), x2: fx(width - COLUMNS.margin), y2: fx(mid + rowHeight / 2), stroke: "soft" }));
+      headerModel = textual ? { text: textRow(mid) } : { cells: rowCells(mid) };
+      rowLabels(mid, { text: { parts: [{ t: header.plaintext }] }, nonce: { parts: [{ t: header.nonce }] } });
+    }
+    for (let i = 0; i < rows; i++) {
+      const mid = top + (i + (header ? 1 : 0)) * rowHeight + rowHeight / 2;
+      if (i < rows - 1) // interior separators only: no bottom rule
+        furniture.push(P("line", { x1: COLUMNS.margin, y1: fx(mid + rowHeight / 2), x2: fx(width - COLUMNS.margin), y2: fx(mid + rowHeight / 2), stroke: "soft" }));
+      if (textual) { cells.push([]); textRows.push(textRow(mid)); }
+      else cells.push(rowCells(mid));
+      rowLabels(mid, { text: { row: i, field: "plaintext" }, nonce: { row: i, field: "nonce" } });
+    }
+    return { width, height, cells, textRows, furniture, labels, header: headerModel, topRuleY: top - GUTTER.ruleLift, display };
+  }
+
+  const layouts = { plate, rings, hexRing, honeycomb, radial, rosette, spiral, gutter };
+
+  // build(name, rows, cols, options) -> model
+  function build(name, rows, cols, options = {}) {
+    const fn = layouts[name];
+    if (!fn) throw new Error("unknown layout " + name);
+    const model = fn(rows, cols, options);
+    model.name = name;
+    model.rows = rows;
+    model.cols = cols;
+    if (options.decorations === false) model.furniture = [];
+    if (options.labels === false) { model.labels = []; model.overlays = []; }
+    return model;
+  }
+
+  grinding.layout = { layouts, layoutNames: Object.keys(layouts), build };
+})();
+
+// Animation package — how stored results become elapsed time.
+// Nothing here knows about colour or shape: it maps a clock to a search index
+// and a nonce, scaling the step size up and back down so the ramp eases in and
+// out and still lands exactly on the recorded winning nonce.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+
+  const easings = {
+    linear: p => p,
+    inOutCubic: p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
+    inOutQuint: p => p < 0.5 ? 16 * Math.pow(p, 5) : 1 - Math.pow(-2 * p + 2, 5) / 2,
+    outExpo: p => p === 1 ? 1 : 1 - Math.pow(2, -10 * p),
+    inOutSine: p => -(Math.cos(Math.PI * p) - 1) / 2
+  };
+
+  // work a step represents: the hashes since the previous match on its search
+  const work = s => s.deltaAttempts ?? s.attempts;
+
+  // per-step duration derived from the real attempt count, compressed by sqrt
+  // so an astronomical spread in work becomes a small spread on screen.
+  // steps are the flattened progression: { row, matchedChars, achievedChars,
+  // nonce, prevNonce, deltaAttempts, hash } in grind order.
+  function schedule(steps, opts = {}) {
+    const { timeScale = 1, holdMs = 7000, baseMs = 650, spanMs = 2500, compress = Math.sqrt, drawMs = null, rowPauseMs = 0, header = true } = opts;
+    const slowest = Math.max(...steps.map(work));
+    let durations = steps.map(s => (baseMs + spanMs * compress(work(s) / slowest)) / timeScale);
+    // a rest after each row's final step — not after the last row — plus a
+    // lead-in: a rest with everything pending, then, for the pieces that draw
+    // an initial-value row, that row appears and rests too before the first
+    // row begins; with no such row the second rest would stage nothing
+    const pauses = steps.map((s, i) =>
+      rowPauseMs && steps[i + 1] && steps[i + 1].row !== s.row ? rowPauseMs : 0);
+    const headerAt = rowPauseMs;
+    const lead = rowPauseMs * (header ? 2 : 1);
+    const pauseTotal = lead + pauses.reduce((a, p) => a + p, 0);
+    const workTotal = durations.reduce((a, d) => a + d, 0);
+    // an explicit drawing time rescales the grind so the whole drawing
+    // (rests included, at their set length) takes exactly drawMs
+    if (drawMs > 0 && workTotal > 0) {
+      const k = Math.max(drawMs - pauseTotal, drawMs * 0.1) / workTotal;
+      durations = durations.map(d => d * k);
+    }
+    const starts = [];
+    let t = lead;
+    durations.forEach((d, i) => { starts.push(t); t += d + pauses[i]; });
+    return { durations, starts, pauses, lead, headerAt, gridEnd: t, total: t + holdMs, holdMs };
+  }
+
+  function phaseAt(clockMs, steps, sched, opts = {}) {
+    const { easing = "inOutCubic", churnEvery = 11, loop = true, dtMs = 0, frameP: framePOpt = 1 / 16 } = opts;
+    const ease = typeof easing === "function" ? easing : easings[easing];
+    const t = loop ? clockMs % sched.total : Math.min(clockMs, sched.total);
+    const last = steps.length - 1;
+    const rows = steps[last].row + 1;
+    if (t >= sched.gridEnd) {
+      return { t, locked: rows, current: -1, stepIndex: -1, achieved: -1, nonce: steps[last].nonce, step: 0, seed: 0, done: true, header: true };
+    }
+    // the lead-in rests: first everything greyed out, every row pending,
+    // then the initial value appears and holds before the first row begins
+    if (t < sched.starts[0]) {
+      return {
+        t, stepIndex: -1, locked: 0, current: -2, resting: true,
+        header: t >= (sched.headerAt || 0),
+        achieved: 0, targetChars: 0, nonce: 0, step: 0, seed: 0, done: false
+      };
+    }
+    let s = 0;
+    while (s < last && t >= sched.starts[s + 1]) s++;
+    const st = steps[s];
+    // in the rest after a row's final step: the row sits freshly locked
+    if (t - sched.starts[s] >= sched.durations[s]) {
+      return {
+        t, stepIndex: s, locked: st.row + 1, current: st.row, resting: true,
+        header: true, achieved: st.matchedChars, targetChars: st.matchedChars,
+        nonce: st.nonce, step: 0, seed: 0, done: false
+      };
+    }
+    const p = Math.min(1, (t - sched.starts[s]) / sched.durations[s]);
+    const frameP = dtMs ? dtMs / sched.durations[s] : framePOpt;
+    const e = ease(p), ePrev = ease(Math.max(0, p - frameP));
+    // each step continues its search's grind from the previous match
+    const from = st.prevNonce || 0, span = st.nonce - from;
+    const nonce = Math.round(from + span * e);
+    return {
+      t, stepIndex: s, locked: st.row, current: st.row, header: true,
+      achieved: st.achievedChars, targetChars: st.matchedChars, nonce,
+      step: Math.max(1, Math.round(span * (e - ePrev))),
+      seed: (Math.floor(nonce / churnEvery) % 2147483647) + s * 7919,
+      done: false, progress: p
+    };
+  }
+
+  const finalPhase = (steps, sched) => ({
+    t: sched.gridEnd, locked: steps[steps.length - 1].row + 1, current: -1, stepIndex: -1, achieved: -1,
+    nonce: steps[steps.length - 1].nonce, step: 0, seed: 0, done: true, header: true
+  });
+
+  // ---- frame addressing: the whole piece as a function of an integer ----
+  const FPS = 30;
+  const frameCount = (sched, fps = FPS) => Math.max(1, Math.round(sched.total / 1000 * fps));
+
+  // deterministic: the same frame index always yields the same phase
+  function phaseAtFrame(frame, steps, sched, opts = {}) {
+    const fps = opts.fps || FPS;
+    const frames = frameCount(sched, fps);
+    const f = ((Math.round(frame) % frames) + frames) % frames;
+    const ph = phaseAt(f / fps * 1000, steps, sched, { ...opts, loop: false, dtMs: 1000 / fps });
+    return { ...ph, frame: f, frames, fps };
+  }
+
+  // first frame at which every search is locked (the exportable final state)
+  function finalFrame(sched, fps = FPS) {
+    return Math.min(frameCount(sched, fps) - 1, Math.ceil(sched.gridEnd / 1000 * fps) + 1);
+  }
+
+  grinding.animation = { easings, schedule, phaseAt, finalPhase, FPS, frameCount, phaseAtFrame, finalFrame };
+})();
+
+// Render package — one model, two outputs.
+// mount() puts the model in the live DOM and hands back fill operations;
+// toSVG() serialises the same model and state to a standalone file. Both read
+// the identical primitives, so the export matches the frame exactly.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+
+  const NS = "http://www.w3.org/2000/svg";
+  const MONO = "ui-monospace, Menlo, Consolas, monospace";
+  const HALO_STROKE = 3; // the match keyline's width; half shows as the halo
+  const defaults = { ground: "#ffffff", ink: "#16161a", grid: "#d5d2cb", ruleSoft: "#ecebe6", magic: "#d0281e", magicWeight: "400", hairline: 0.75 };
+
+  // layouts mark rule strokes with tokens; the theme supplies the colours
+  const STROKE_TOKENS = { soft: "ruleSoft", gridline: "grid" };
+  const themed = (attrs, t) => STROKE_TOKENS[attrs.stroke]
+    ? { ...attrs, stroke: t[STROKE_TOKENS[attrs.stroke]] }
+    : attrs;
+
+  function el(tag, attrs) {
+    const node = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
+
+  // wrap a static text over a row's baselines, centring when it needs fewer
+  // lines than the row provides (e.g. the short initial value on a hex row)
+  function headerLines(spec, text) {
+    const used = Math.max(1, Math.ceil(text.length / spec.perLine));
+    if (used >= spec.baselines.length)
+      return spec.baselines.map((y, l) => [y, text.slice(l * spec.perLine, (l + 1) * spec.perLine)])
+        .filter(([, str]) => str);
+    const mid = spec.baselines.reduce((a, y) => a + y, 0) / spec.baselines.length;
+    return [[Number(mid.toFixed(2)), text]];
+  }
+
+  function mount(host, model, theme = {}) {
+    const t = { ...defaults, ...theme };
+    host.textContent = "";
+    // the viewBox carries the 16:9 frame; the host's CSS sizes the element and
+    // preserveAspectRatio letterboxes it, so the drawing scales with the window
+    const svg = el("svg", { viewBox: "0 0 " + model.width + " " + model.height, preserveAspectRatio: "xMidYMid meet" });
+    svg.style.display = "block";
+    svg.appendChild(el("rect", { width: model.width, height: model.height, fill: t.ground }));
+
+    const gFurniture = el("g", { fill: "none", stroke: t.ink, "stroke-width": 1 });
+    for (const p of model.furniture) gFurniture.appendChild(el(p.tag, themed(p.attrs, t)));
+    svg.appendChild(gFurniture);
+
+    // circular text (rings) rides SVG paths kept in defs
+    let defsNode = null;
+    const circPath = s => {
+      if (!defsNode) { defsNode = el("defs", {}); svg.insertBefore(defsNode, svg.firstChild); }
+      defsNode.appendChild(el("path", { id: s.id, d: s.pathD, fill: "none" }));
+    };
+
+    // three layers, bottom to top: grey placeholders (empty rows and the
+    // header's empty cells), the red match halos above them, and everything
+    // filled on top — so a halo never crosses a filled shape, and grey
+    // outlines never cross a halo or a filled shape
+    const gEmpty = el("g", {});
+    svg.appendChild(gEmpty);
+    const gMagic = el("g", {});
+    svg.appendChild(gMagic);
+    const gFilled = el("g", {});
+    svg.appendChild(gFilled);
+    const toLayer = (node, layer) => { if (node.parentNode !== layer) layer.appendChild(node); };
+
+    // text display: two nodes per row — the matched prefix, then the rest —
+    // on a fixed character grid so rows align regardless of content
+    const textRowNodes = (model.textRows || []).map(s => {
+      const topNodes = [];
+      if (s.paths) {
+        const pathLines = s.paths.map(p => {
+          circPath(p);
+          const node = el("text", { "font-size": s.size, "font-family": MONO });
+          const tp = el("textPath", { href: "#" + p.id });
+          const head = el("tspan", { fill: t.magic, "font-weight": t.magicWeight });
+          const tail = el("tspan", { fill: t.ink });
+          tp.appendChild(head);
+          tp.appendChild(tail);
+          node.appendChild(tp);
+          gEmpty.appendChild(node);
+          topNodes.push(node);
+          return { head, tail };
+        });
+        return { spec: s, pathLines, topNodes };
+      }
+      const mk = (y, fill, weight) => {
+        const node = el("text", {
+          x: s.x, y, "font-size": s.size, "font-family": MONO, fill,
+          lengthAdjust: "spacingAndGlyphs", ...(weight ? { "font-weight": weight } : {})
+        });
+        gEmpty.appendChild(node);
+        topNodes.push(node);
+        return node;
+      };
+      return { spec: s, lines: s.baselines.map(y => ({ head: mk(y, t.magic, t.magicWeight), tail: mk(y, t.ink) })), topNodes };
+    });
+    const setText = (node, str, x, len) => {
+      node.textContent = str;
+      node.setAttribute("x", x.toFixed(2));
+      if (str.length) node.setAttribute("textLength", len.toFixed(2));
+      else node.removeAttribute("textLength");
+    };
+    // an empty row shows its placeholder dots, in the underlay layer
+    const restRow = tr => {
+      tr.topNodes.forEach(n => toLayer(n, gEmpty));
+      if (tr.pathLines) {
+        const { perLine, placeholder = "" } = tr.spec;
+        tr.pathLines.forEach((ln, l) => {
+          ln.head.textContent = "";
+          ln.tail.textContent = placeholder.slice(l * perLine, (l + 1) * perLine);
+          ln.tail.setAttribute("fill", t.grid);
+        });
+        return;
+      }
+      const { x, cw, perLine } = tr.spec;
+      tr.lines.forEach((ln, l) => {
+        const str = (tr.spec.placeholder || "").slice(l * perLine, (l + 1) * perLine);
+        setText(ln.head, "", x, 0);
+        setText(ln.tail, str, x, str.length * cw);
+        ln.tail.setAttribute("fill", t.grid);
+      });
+    };
+    textRowNodes.forEach(restRow);
+
+    // the initial-value row, from the preimage bytes: grey like a pending row
+    // until the lead-in rest ends, then filled with the base word's cells or
+    // characters marked exactly as a matched prefix is on the search rows
+    let headerBody = null;
+    if (model.header && model.header.cells) {
+      const magic = model.headerMagic || 0;
+      const gF = el("g", {}), gE = el("g", {});
+      const coloured = [];
+      model.header.cells.forEach((p, k) => {
+        const c = (model.headerColours || [])[k];
+        const node = el(p.tag, { ...p.attrs, fill: "none", stroke: t.grid, "stroke-width": 1 });
+        if (c) { gF.appendChild(node); coloured.push({ node, c }); }
+        else gE.appendChild(node);
+      });
+      gEmpty.appendChild(gE);
+      gEmpty.appendChild(gF);
+      let halos = [];
+      headerBody = on => {
+        toLayer(gF, on ? gFilled : gEmpty);
+        for (const { node, c } of coloured) {
+          node.setAttribute("fill", on ? c : "none");
+          node.setAttribute("stroke", on ? "none" : t.grid);
+        }
+        if (on && !halos.length) {
+          for (let k = 0; k < magic && k < model.header.cells.length; k++) {
+            const p = model.header.cells[k];
+            const node = el(p.tag, { ...p.attrs, fill: "none", stroke: t.magic, "stroke-width": HALO_STROKE });
+            gMagic.appendChild(node);
+            halos.push(node);
+          }
+        } else if (!on) {
+          for (const node of halos) node.remove();
+          halos = [];
+        }
+      };
+    } else if (model.header && model.header.text && model.headerText != null) {
+      const magic = model.headerMagic || 0;
+      const s = model.header.text;
+      if (s.paths) {
+        const lines = s.paths.map(p => {
+          circPath(p);
+          const node = el("text", { "font-size": s.size, "font-family": MONO });
+          const tp = el("textPath", { href: "#" + p.id });
+          const head = el("tspan", { fill: t.magic, "font-weight": t.magicWeight });
+          const tail = el("tspan", { fill: t.grid });
+          tp.appendChild(head);
+          tp.appendChild(tail);
+          node.appendChild(tp);
+          gEmpty.appendChild(node);
+          return { node, head, tail };
+        });
+        headerBody = on => lines.forEach((ln, l) => {
+          toLayer(ln.node, on ? gFilled : gEmpty);
+          const str = (on ? model.headerText : s.placeholder || "").slice(l * s.perLine, (l + 1) * s.perLine);
+          const m = on ? Math.max(0, Math.min(magic - l * s.perLine, str.length)) : 0;
+          ln.head.textContent = str.slice(0, m);
+          ln.tail.textContent = str.slice(m);
+          ln.tail.setAttribute("fill", on ? t.ink : t.grid);
+        });
+      } else {
+        const mkHeaderText = fill => {
+          const node = el("text", { "font-size": s.size, "font-family": MONO, fill, lengthAdjust: "spacingAndGlyphs" });
+          gEmpty.appendChild(node);
+          return node;
+        };
+        const dots = s.baselines.map(() => mkHeaderText(t.grid));
+        // the shown text centres over the row's baselines, so it gets its
+        // own nodes; the dots cover every baseline like a pending row's
+        const shown = headerLines(s, model.headerText).map(([y, str]) => ({
+          y, str, head: mkHeaderText(t.magic), tail: mkHeaderText(t.ink)
+        }));
+        shown.forEach(ln => {
+          ln.head.setAttribute("y", ln.y);
+          ln.head.setAttribute("font-weight", t.magicWeight);
+          ln.tail.setAttribute("y", ln.y);
+        });
+        headerBody = on => {
+          dots.forEach((node, l) => {
+            const str = on ? "" : (s.placeholder || "").slice(l * s.perLine, (l + 1) * s.perLine);
+            node.setAttribute("y", s.baselines[l]);
+            setText(node, str, s.x, str.length * s.cw);
+          });
+          let off = 0;
+          for (const ln of shown) {
+            toLayer(ln.head, on ? gFilled : gEmpty);
+            toLayer(ln.tail, on ? gFilled : gEmpty);
+            const m = Math.max(0, Math.min(magic - off, ln.str.length));
+            off += ln.str.length;
+            setText(ln.head, on ? ln.str.slice(0, m) : "", s.x, m * s.cw);
+            setText(ln.tail, on ? ln.str.slice(m) : "", s.x + m * s.cw, (ln.str.length - m) * s.cw);
+          }
+        };
+      }
+    }
+
+    const rowGroups = [];
+    const rowNodes = model.cells.map(row => {
+      const g = el("g", {});
+      const nodes = row.map(p => {
+        const node = el(p.tag, { ...p.attrs, fill: "none", stroke: t.grid, "stroke-width": 1 });
+        g.appendChild(node);
+        return node;
+      });
+      gEmpty.appendChild(g);
+      rowGroups.push(g);
+      return nodes;
+    });
+
+    // callout leaders etc. draw over the cells (rings are nested, so a
+    // leader line must pass over outer bands to reach its own)
+    if (model.overlays && model.overlays.length) {
+      const g = el("g", { fill: "none", "stroke-width": 1 });
+      for (const p of model.overlays) g.appendChild(el(p.tag, themed(p.attrs, t)));
+      svg.appendChild(g);
+    }
+
+    const magicNodes = model.cells.map(() => []);
+    const labelNodes = model.labels.map(l => {
+      const node = el("text", {
+        x: l.x, y: l.y, "text-anchor": l.anchor || "start", "font-size": l.size || 12,
+        "font-family": l.mono ? "ui-monospace, Menlo, Consolas, monospace" : "Helvetica Neue, Helvetica, sans-serif",
+        fill: t.grid
+      });
+      if (l.parts) {
+        // static label, e.g. the initial value: fixed parts, never repainted
+        node.removeAttribute("fill");
+        for (const p of l.parts) {
+          const ts = el("tspan", { fill: p.dim ? t.grid : t.ink });
+          ts.textContent = p.t;
+          node.appendChild(ts);
+        }
+      }
+      svg.appendChild(node);
+      return { node, spec: l };
+    });
+
+    host.appendChild(svg);
+
+    let headerOn = null;
+
+    return {
+      svg,
+      // show or hide the initial-value row (and its static labels): hidden it
+      // sits grey like every pending row, during the first lead-in rest
+      setHeader(on) {
+        if (on === headerOn) return;
+        headerOn = on;
+        if (headerBody) headerBody(on);
+        for (const { node, spec } of labelNodes) {
+          if (!spec.parts) continue;
+          [...node.children].forEach((ts, j) =>
+            ts.setAttribute("fill", on && !spec.parts[j].dim ? t.ink : t.grid));
+        }
+      },
+      // paint one row; magic = leading cells to keyline / characters to redden
+      fillRow(i, colours, magic = 0, locked = true) {
+        if (textRowNodes.length) {
+          const tr = textRowNodes[i];
+          if (!tr) return;
+          tr.topNodes.forEach(n => toLayer(n, gFilled));
+          if (tr.pathLines) {
+            const { perLine } = tr.spec;
+            tr.pathLines.forEach((ln, l) => {
+              const str = colours.slice(l * perLine, (l + 1) * perLine);
+              const m = Math.max(0, Math.min(magic - l * perLine, str.length));
+              ln.head.textContent = str.slice(0, m);
+              ln.tail.textContent = str.slice(m);
+              ln.tail.setAttribute("fill", locked ? t.ink : t.grid);
+            });
+            return;
+          }
+          const { x, cw, perLine } = tr.spec;
+          tr.lines.forEach((ln, l) => {
+            const str = colours.slice(l * perLine, (l + 1) * perLine);
+            const m = Math.max(0, Math.min(magic - l * perLine, str.length));
+            setText(ln.head, str.slice(0, m), x, m * cw);
+            setText(ln.tail, str.slice(m), x + m * cw, (str.length - m) * cw);
+            ln.tail.setAttribute("fill", locked ? t.ink : t.grid);
+          });
+          return;
+        }
+        const nodes = rowNodes[i];
+        if (!nodes) return;
+        toLayer(rowGroups[i], gFilled);
+        for (let k = 0; k < nodes.length; k++) {
+          nodes[k].setAttribute("fill", colours[k] || "none");
+          nodes[k].setAttribute("stroke", colours[k] ? "none" : t.grid);
+          nodes[k].setAttribute("stroke-width", 1);
+        }
+        if (magicNodes[i].length !== magic) {
+          for (const node of magicNodes[i]) node.remove();
+          magicNodes[i] = [];
+          for (let k = 0; k < magic && k < nodes.length; k++) {
+            const p = model.cells[i][k];
+            const node = el(p.tag, { ...p.attrs, fill: "none", stroke: t.magic, "stroke-width": HALO_STROKE });
+            gMagic.appendChild(node);
+            magicNodes[i].push(node);
+          }
+        }
+      },
+      clearRow(i) {
+        if (textRowNodes.length) {
+          const tr = textRowNodes[i];
+          if (tr) restRow(tr);
+          return;
+        }
+        if (rowGroups[i]) toLayer(rowGroups[i], gEmpty);
+        for (const node of rowNodes[i] || []) {
+          node.setAttribute("fill", "none");
+          node.setAttribute("stroke", t.grid);
+          node.setAttribute("stroke-width", 1);
+        }
+        for (const node of magicNodes[i]) node.remove();
+        magicNodes[i] = [];
+      },
+      setLabels(records, activeRow, extras = {}) {
+        for (const { node, spec } of labelNodes) {
+          if (spec.parts) continue;
+          const rec = records[spec.row];
+          if (!rec) continue;
+          // activeRow -1 = done (nothing pending); below -1 = lead-in (all pending)
+          const pending = activeRow !== -1 && spec.row > activeRow;
+          const active = spec.row === activeRow;
+          if (spec.field === "plaintext") {
+            // letters that have matched in black; the rest stay grid-grey
+            const m = extras.matched ? extras.matched[spec.row] : (rec.matchedChars ?? rec.totalChars ?? rec.plaintext.length);
+            node.textContent = "";
+            if (rec.labelPrefix) {
+              // provenance for rows whose base differs (star_to, spiral):
+              // stays quiet grey, never part of the match marking
+              const pre = el("tspan", { fill: t.grid });
+              pre.textContent = rec.labelPrefix;
+              node.appendChild(pre);
+            }
+            const head = el("tspan", { fill: t.ink });
+            head.textContent = rec.plaintext.slice(0, m);
+            const tail = el("tspan", { fill: t.grid });
+            tail.textContent = rec.plaintext.slice(m);
+            node.appendChild(head);
+            node.appendChild(tail);
+            node.removeAttribute("fill");
+            continue;
+          }
+          const value = spec.field === "nonce"
+            ? (pending ? "—" : (active ? extras.liveNonce : rec.nonce).toLocaleString("en-US"))
+            : rec[spec.field];
+          node.textContent = value;
+          node.setAttribute("fill", pending ? t.grid : (active ? t.magic : t.ink));
+          node.setAttribute("font-weight", active ? t.magicWeight : "400");
+        }
+      },
+      showGrid(on) {
+        for (const nodes of rowNodes)
+          for (const node of nodes)
+            if (node.getAttribute("fill") === "none") node.setAttribute("stroke", on ? t.grid : "none");
+      }
+    };
+  }
+
+  // state: { rows: [colours|null], magic: [n], records }
+  function toSVG(model, state, theme = {}, meta = []) {
+    const t = { ...defaults, ...theme };
+    const attr = a => Object.entries(a).map(([k, v]) => k + '="' + v + '"').join(" ");
+    const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const scale = theme.exportScale || 2;
+    let out = '<svg xmlns="' + NS + '" width="' + model.width * scale + '" height="' + model.height * scale +
+      '" viewBox="0 0 ' + model.width + " " + model.height + '">\n';
+    if (meta.length) out += "  <metadata>\n" + meta.map(m => "    " + m).join("\n") + "\n  </metadata>\n";
+    out += '  <rect width="' + model.width + '" height="' + model.height + '" fill="' + t.ground + '"/>\n';
+    for (const p of model.furniture)
+      out += "  <" + p.tag + " " + attr({ fill: "none", stroke: t.ink, "stroke-width": 1, ...themed(p.attrs, t) }) + "/>\n";
+    const textNode = (x, y, size, str, len, fill, weight) => str.length
+      ? '  <text ' + attr({
+          x: typeof x === "number" ? x.toFixed(2) : x, y, "font-size": size, "font-family": MONO, fill,
+          lengthAdjust: "spacingAndGlyphs", textLength: len.toFixed(2),
+          ...(weight ? { "font-weight": weight } : {})
+        }) + ">" + esc(str) + "</text>\n"
+      : "";
+    // text paths live in defs
+    const circPaths = (model.textRows || []).flatMap(s => s.paths || []);
+    if (model.header && model.header.text && model.header.text.paths) circPaths.unshift(...model.header.text.paths);
+    if (circPaths.length) {
+      out += "  <defs>\n";
+      for (const p of circPaths) out += "    <path " + attr({ id: p.id, d: p.pathD, fill: "none" }) + "/>\n";
+      out += "  </defs>\n";
+    }
+    // the initial value hides (grey, like a pending row) until the first
+    // lead-in rest has passed
+    const headerShown = state.header !== false;
+    const headerMagic = model.headerMagic || 0;
+    // bottom to top: grey placeholders (empty rows and the header's empty
+    // cells), then the match halos, then everything filled
+    if (!model.textRows) {
+      model.cells.forEach((row, i) => {
+        if (!state.rows[i])
+          row.forEach(p =>
+            out += "  <" + p.tag + " " + attr({ ...p.attrs, fill: "none", stroke: t.grid, "stroke-width": 1 }) + "/>\n");
+      });
+      if (model.header && model.header.cells)
+        model.header.cells.forEach((p, k) => {
+          if (!headerShown || !(model.headerColours || [])[k])
+            out += "  <" + p.tag + " " + attr({ ...p.attrs, fill: "none", stroke: t.grid, "stroke-width": 1 }) + "/>\n";
+        });
+      // the base word's cells in the header take the match keyline too
+      if (headerShown && model.header && model.header.cells)
+        for (let k = 0; k < headerMagic && k < model.header.cells.length; k++)
+          out += "  <" + model.header.cells[k].tag + " " + attr({ ...model.header.cells[k].attrs, fill: "none", stroke: t.magic, "stroke-width": HALO_STROKE }) + "/>\n";
+      model.cells.forEach((row, i) => {
+        if (state.rows[i] && state.magic[i])
+          for (let k = 0; k < state.magic[i] && k < row.length; k++)
+            out += "  <" + row[k].tag + " " + attr({ ...row[k].attrs, fill: "none", stroke: t.magic, "stroke-width": HALO_STROKE }) + "/>\n";
+      });
+    }
+    if (model.header) {
+      if (model.header.cells) {
+        if (headerShown)
+          model.header.cells.forEach((p, k) => {
+            const c = (model.headerColours || [])[k];
+            if (c) out += "  <" + p.tag + " " + attr({ ...p.attrs, fill: c, stroke: "none", "stroke-width": 1 }) + "/>\n";
+          });
+      } else if (model.header.text && model.headerText != null) {
+        const s = model.header.text;
+        if (!headerShown) {
+          // placeholder dots, exactly as a pending row shows them
+          if (s.paths)
+            s.paths.forEach((p, l) => {
+              const str = (s.placeholder || "").slice(l * s.perLine, (l + 1) * s.perLine);
+              if (str)
+                out += "  <text " + attr({ "font-size": s.size, "font-family": MONO, fill: t.grid }) +
+                  '><textPath href="#' + p.id + '">' + esc(str) + "</textPath></text>\n";
+            });
+          else
+            s.baselines.forEach((y, l) => {
+              const str = (s.placeholder || "").slice(l * s.perLine, (l + 1) * s.perLine);
+              out += textNode(s.x, y, s.size, str, str.length * s.cw, t.grid);
+            });
+        } else if (s.paths)
+          s.paths.forEach((p, l) => {
+            const str = model.headerText.slice(l * s.perLine, (l + 1) * s.perLine);
+            const m = Math.max(0, Math.min(headerMagic - l * s.perLine, str.length));
+            if (str)
+              out += "  <text " + attr({ "font-size": s.size, "font-family": MONO }) +
+                '><textPath href="#' + p.id + '">' +
+                "<tspan " + attr({ fill: t.magic, "font-weight": t.magicWeight }) + ">" + esc(str.slice(0, m)) + "</tspan>" +
+                "<tspan " + attr({ fill: t.ink }) + ">" + esc(str.slice(m)) + "</tspan>" +
+                "</textPath></text>\n";
+          });
+        else {
+          let off = 0;
+          for (const [y, str] of headerLines(s, model.headerText)) {
+            const m = Math.max(0, Math.min(headerMagic - off, str.length));
+            off += str.length;
+            out += textNode(s.x, y, s.size, str.slice(0, m), m * s.cw, t.magic, t.magicWeight);
+            out += textNode(s.x + m * s.cw, y, s.size, str.slice(m), (str.length - m) * s.cw, t.ink);
+          }
+        }
+      }
+    }
+    if (model.textRows) {
+      // pending placeholder dots first: they sit under the filled rows
+      state.rows.forEach((value, i) => {
+        const tr = model.textRows[i];
+        if (value || !tr || !tr.placeholder) return;
+        if (tr.paths)
+          tr.paths.forEach((p, l) => {
+            const str = tr.placeholder.slice(l * tr.perLine, (l + 1) * tr.perLine);
+            out += "  <text " + attr({ "font-size": tr.size, "font-family": MONO, fill: t.grid }) +
+              '><textPath href="#' + p.id + '">' + esc(str) + "</textPath></text>\n";
+          });
+        else
+          tr.baselines.forEach((y, l) => {
+            const str = tr.placeholder.slice(l * tr.perLine, (l + 1) * tr.perLine);
+            out += textNode(tr.x, y, tr.size, str, str.length * tr.cw, t.grid);
+          });
+      });
+      state.rows.forEach((value, i) => {
+        const tr = model.textRows[i];
+        if (!value) return;
+        const locked = state.activeRow !== i || state.resting;
+        if (tr.paths) {
+          tr.paths.forEach((p, l) => {
+            const str = value.slice(l * tr.perLine, (l + 1) * tr.perLine);
+            const m = Math.max(0, Math.min((state.magic[i] || 0) - l * tr.perLine, str.length));
+            out += "  <text " + attr({ "font-size": tr.size, "font-family": MONO }) +
+              '><textPath href="#' + p.id + '">' +
+              "<tspan " + attr({ fill: t.magic, "font-weight": t.magicWeight }) + ">" + esc(str.slice(0, m)) + "</tspan>" +
+              "<tspan " + attr({ fill: locked ? t.ink : t.grid }) + ">" + esc(str.slice(m)) + "</tspan>" +
+              "</textPath></text>\n";
+          });
+          return;
+        }
+        tr.baselines.forEach((y, l) => {
+          const str = value.slice(l * tr.perLine, (l + 1) * tr.perLine);
+          const m = Math.max(0, Math.min((state.magic[i] || 0) - l * tr.perLine, str.length));
+          out += textNode(tr.x, y, tr.size, str.slice(0, m), m * tr.cw, t.magic, t.magicWeight);
+          out += textNode(tr.x + m * tr.cw, y, tr.size, str.slice(m), (str.length - m) * tr.cw, locked ? t.ink : t.grid);
+        });
+      });
+    } else
+      model.cells.forEach((row, i) => {
+        const colours = state.rows[i];
+        if (!colours) return; // placeholders already emitted in the underlay
+        row.forEach((p, k) => {
+          const fill = colours[k] || "none";
+          out += "  <" + p.tag + " " + attr({ ...p.attrs, fill, stroke: fill === "none" ? t.grid : "none", "stroke-width": 1 }) + "/>\n";
+        });
+      });
+    for (const p of (model.overlays || []))
+      out += "  <" + p.tag + " " + attr({ fill: "none", "stroke-width": 1, ...themed(p.attrs, t) }) + "/>\n";
+    for (const l of model.labels) {
+      const open = (fill, weight) => '  <text ' + attr({
+        x: l.x, y: l.y, "text-anchor": l.anchor || "start", "font-size": l.size || 12,
+        "font-family": l.mono ? "ui-monospace, Menlo, Consolas, monospace" : "Helvetica Neue, Helvetica, sans-serif",
+        ...(fill ? { fill } : {}),
+        ...(weight ? { "font-weight": weight } : {})
+      }) + ">";
+      if (l.parts) {
+        // the header's static labels grey out with it during the lead-in
+        out += open(null) +
+          l.parts.map(p => '<tspan fill="' + (p.dim || !headerShown ? t.grid : t.ink) + '">' + esc(p.t) + "</tspan>").join("") +
+          "</text>\n";
+        continue;
+      }
+      const rec = state.records && state.records[l.row];
+      if (!rec) continue;
+      const painted = !!state.rows[l.row];
+      const active = state.activeRow === l.row;
+      if (l.field === "plaintext") {
+        const m = state.matched ? state.matched[l.row] : (rec.matchedChars ?? rec.totalChars ?? rec.plaintext.length);
+        out += open(null) +
+          (rec.labelPrefix ? '<tspan fill="' + t.grid + '">' + esc(rec.labelPrefix) + "</tspan>" : "") +
+          '<tspan fill="' + t.ink + '">' + esc(rec.plaintext.slice(0, m)) + "</tspan>" +
+          '<tspan fill="' + t.grid + '">' + esc(rec.plaintext.slice(m)) + "</tspan>" +
+          "</text>\n";
+        continue;
+      }
+      const text = l.field === "nonce"
+        ? (painted || active ? (active ? state.liveNonce : rec.nonce).toLocaleString("en-US") : "—")
+        : rec[l.field];
+      out += open(painted || active ? (active ? t.magic : t.ink) : t.grid, active ? t.magicWeight : null) + text + "</text>\n";
+    }
+    return out + "</svg>\n";
+  }
+
+  function download(name, svgText) {
+    const url = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  grinding.render = { defaults, mount, toSVG, download };
+})();
+
+// Artwork package — the deterministic entry point.
+// build() fixes the inputs; every visual state is then a pure function of an
+// integer frame, so the animation, a still, and any future edition come from
+// the same code.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+
+  const defaults = {
+    layout: "gutter", encoding: "rgb12", easing: "inOutCubic",
+    display: "squares", // squares | circles | hex | ascii
+    sizing: "fit", // fit | fill | overlap — element size on the fanning layouts
+    channelFloor: undefined, // raise for dark grounds so zero bytes stay visible
+    timeScale: 1, holdSeconds: 60, drawSeconds: null, // null = data-driven; 0 = still
+    rowPauseSeconds: 2, // rest between rows (not after the last); 0 = none
+    cellGap: 0.06, decorations: true, labels: null, salt: 0
+  };
+
+  // a hash as text: its hex digits, or its bytes as ascii (unprintables as ·)
+  function hashText(hex, display) {
+    if (display !== "ascii") return hex;
+    let out = "";
+    for (let k = 0; k + 1 < hex.length; k += 2) {
+      const c = parseInt(hex.slice(k, k + 2), 16);
+      out += (c >= 32 && c <= 126) ? String.fromCharCode(c) : "·";
+    }
+    return out;
+  }
+
+  // colour cells the matched prefix occupies: the search encoding gives
+  // nibbles matched in the hash, the colour encoding gives nibbles per cell
+  const magicCells = (record, enc) => Math.ceil(record.matchedNibbles / enc.nibblesPerCell);
+
+  function totals(searches) {
+    return {
+      searches: searches.length,
+      matches: searches.reduce((a, r) => a + (r.steps ? r.steps.length : 1), 0),
+      attempts: searches.reduce((a, r) => a + r.attempts, 0)
+    };
+  }
+
+  // one animation step per progression match, in grind order across all rows
+  function flattenSteps(searches) {
+    const steps = [];
+    searches.forEach((r, row) => {
+      let achievedChars = 0, prevHash = null;
+      for (const st of (r.steps || [r])) {
+        steps.push({ ...st, row, achievedChars, prevHash });
+        achievedChars = st.matchedChars;
+        prevHash = st.hash;
+      }
+    });
+    return steps;
+  }
+
+  // the live row: churn, except the matched-so-far prefix, which shows its
+  // real value (from the last match's hash) under the match marking
+  function liveCells(art, ph) {
+    const st = art.steps[ph.stepIndex];
+    const r = st && art.searches[st.row];
+    // nibbles per character comes from the full encoded word, not the (possibly
+    // partial) matched nibble count
+    const achievedNibbles = (st && st.prevHash && st.achievedChars)
+      ? st.achievedChars * (r.encodedHex.length / r.totalChars) : 0;
+    if (art.textual) {
+      let hex = grinding.colour.churnHex(ph.seed + art.options.salt, 64);
+      if (achievedNibbles) hex = st.prevHash.slice(0, achievedNibbles) + hex.slice(achievedNibbles);
+      return {
+        colours: hashText(hex, art.display),
+        magic: art.display === "ascii" ? achievedNibbles / 2 : achievedNibbles
+      };
+    }
+    const colours = grinding.colour.churnCells(ph.seed + art.options.salt, art.cols, art.encoding, art.options.channelFloor);
+    if (!achievedNibbles) return { colours, magic: 0 };
+    const magic = Math.ceil(achievedNibbles / art.enc.nibblesPerCell);
+    const real = grinding.colour.cellsFromHash(st.prevHash, art.encoding, art.options.channelFloor);
+    for (let k = 0; k < magic && k < colours.length; k++) colours[k] = real[k];
+    return { colours, magic };
+  }
+
+  function build(options = {}) {
+    const { colour, layout, animation } = grinding;
+    const o = { ...defaults, ...options };
+    const searches = o.searches || grinding.series.records;
+    const enc = colour.encodings[o.encoding];
+    const cols = enc.cells;
+    const display = o.display || "squares";
+    const textual = display === "hex" || display === "ascii";
+    const glyphs = display === "ascii" ? 32 : 64;
+    // the initial value: base ‖ zeroed 64-bit nonce, a row in the same
+    // format. The hub topologies draw no such row — there the base is the
+    // concept the words are ground from, not part of the composition — and
+    // a series can decline its seed row explicitly (seedRow: false)
+    const base = grinding.series && grinding.series.base;
+    const topology = grinding.series && grinding.series.topology;
+    const hubConcept = topology === "star_from" || topology === "spiral";
+    const seedRow = !grinding.series || grinding.series.seedRow !== false;
+    const header = o.header !== undefined ? o.header
+      : (base && !hubConcept && seedRow ? { plaintext: base, nonce: "0" } : null);
+    const model = layout.build(o.layout, searches.length, cols, {
+      gap: o.cellGap, decorations: o.decorations, header, display, glyphs,
+      sizing: o.sizing,
+      labels: o.labels === null ? true : o.labels
+    });
+    if (model.header && base) {
+      const preimageHex = [...base].map(c => c.charCodeAt(0).toString(16).padStart(2, "0")).join("") + "0".repeat(16);
+      // the base word is the header's match: its cells/characters take the
+      // same highlight marking a matched prefix gets on the search rows
+      if (model.header.text) {
+        model.headerText = hashText(preimageHex, display);
+        model.headerMagic = display === "ascii" ? base.length : base.length * 2;
+      } else {
+        model.headerColours = colour.cellsFromHash(preimageHex, o.encoding, o.channelFloor);
+        model.headerMagic = Math.ceil(base.length * 2 / enc.nibblesPerCell);
+      }
+    }
+    const steps = flattenSteps(searches);
+    const sched = animation.schedule(steps, {
+      timeScale: o.timeScale, holdMs: o.holdSeconds * 1000,
+      drawMs: o.drawSeconds > 0 ? o.drawSeconds * 1000 : null,
+      rowPauseMs: (o.rowPauseSeconds || 0) * 1000,
+      header: !!header
+    });
+    return {
+      options: o, searches, steps, encoding: o.encoding, enc, cols, model, sched,
+      display, textual, glyphs,
+      fps: o.fps || animation.FPS,
+      frames: animation.frameCount(sched, o.fps),
+      finalFrame: animation.finalFrame(sched, o.fps),
+      real: searches.map(s => textual ? hashText(s.hash, display) : colour.cellsFromHash(s.hash, o.encoding, o.channelFloor)),
+      magic: searches.map(s => textual
+        ? (display === "ascii" ? s.matchedNibbles / 2 : s.matchedNibbles)
+        : magicCells(s, enc)),
+      totals: totals(searches)
+    };
+  }
+
+  const phaseAtFrame = (art, frame) =>
+    grinding.animation.phaseAtFrame(frame, art.steps, art.sched, { fps: art.fps, easing: art.options.easing });
+
+  // full visual state for one frame: what every row is showing
+  function stateAtFrame(art, frame) {
+    const ph = phaseAtFrame(art, frame);
+    const live = (!ph.done && !ph.resting && ph.current >= 0) ? liveCells(art, ph) : null;
+    const rows = art.searches.map((s, i) => {
+      if (ph.done || i < ph.locked) return art.real[i];
+      if (live && i === ph.current) return live.colours;
+      return null;
+    });
+    return {
+      phase: ph, rows, records: art.searches,
+      matched: art.searches.map((s, i) =>
+        (ph.done || i < ph.locked) ? (s.matchedChars ?? s.totalChars) : (i === ph.current ? ph.achieved : 0)),
+      magic: art.searches.map((s, i) =>
+        (ph.done || i < ph.locked) ? art.magic[i] : (live && i === ph.current ? live.magic : 0)),
+      activeRow: ph.done ? -1 : ph.current,
+      resting: !!ph.resting,
+      header: ph.header !== false,
+      liveNonce: ph.nonce
+    };
+  }
+
+  function metadata(art, frame) {
+    const s = grinding.series;
+    const ph = phaseAtFrame(art, frame);
+    return [
+      "grinding | " + s.name.toLowerCase() + " | base " + s.base + " | " + s.searchEncoding + " | " + s.hashFunction,
+      art.options.layout + " | " + art.enc.label + " | frame " + ph.frame + " of " + ph.frames + " @ " + art.fps + "fps",
+      "easing " + art.options.easing + " | timeScale " + art.options.timeScale + " | salt " + art.options.salt,
+      ...art.searches.map(r => r.word + " | " + (r.steps ? r.steps.length : 1) + " matches | counter " + r.nonce + " | " + r.hash)
+    ];
+  }
+
+  // the whole deliverable: one integer in, one SVG file out
+  function svgAtFrame(art, frame, theme = {}) {
+    return grinding.render.toSVG(art.model, stateAtFrame(art, frame), theme, metadata(art, frame));
+  }
+
+  grinding.artwork = { defaults, magicCells, totals, flattenSteps, liveCells, build, phaseAtFrame, stateAtFrame, metadata, svgAtFrame };
+})();
+
+// Series data — Passions.
+// Generated by generate.js from results.csv: task "passions"
+// (star_from, ascii8, insensitive), budget 2^48 per search. One record
+// per edge; its steps are every successively longer prefix match (first
+// counter value per match length) of the one continuing grind. Every
+// candidate message is base ‖ counter (64-bit little-endian; the counter is
+// the "nonce" column in results.csv); every hash below was re-verified as
+// SHA-256(base ‖ counter) at generation time.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+
+  // base, word, matched chars, counter (the csv’s nonce), hash
+  const rows = [
+    ["passions", "joy", 1, 236, "6a45121918d61dca77608d1642369360f69cb4552cf426ea1c26c596b7d7c774"],
+    ["passions", "joy", 2, 3350, "6a4fae1929a20c39929618156b29b19a99ab4e9958c582ee7290a7dc98c10a02"],
+    ["passions", "joy", 3, 34595559, "6a6f79885c7444d5fb6a1cc3b404366c524799357c27c6e6caa60b004c195ab4"],
+    ["passions", "love", 1, 199, "4cb4ef27fd4c3e8020e67dc0bc9940b4a970eacbde7f1f646d196e15aebbb704"],
+    ["passions", "love", 2, 38537, "4c6f708da9f0a096046f70751253d9ce9eb196d4ab32eeb6e605a2f0f55b29bc"],
+    ["passions", "love", 3, 7408050, "4c4f564314d796f045eaf2dd1b6eaed1ccc57dd52467ee1be15d3731340888f8"],
+    ["passions", "love", 4, 89128782, "4c4f5665c5d600f59e56b0d2d9a40fcaf8973f19d1d84b09ae46dcabbd520efb"],
+    ["passions", "wonder", 1, 222, "576b3099008d422e2d370b1c11e7c579e3a362bc2484ea75c1e674dfd58c849f"],
+    ["passions", "wonder", 2, 6714, "576f1ab8d86bc0a84b16f3f4e193a71f4119c855abe0fdf87df6580b1733df1c"],
+    ["passions", "wonder", 3, 17659469, "574f6e4222cb45a45bda5cb331314684a7f6796f9e358e1816d98a097f28efe6"],
+    ["passions", "wonder", 4, 322237520, "774f4e64274f5eccf25e2e0793b1c1fcaae1f59b2391dcd41d75edf43c82ba8e"],
+    ["passions", "wonder", 5, 11088485411, "576f6e64459aae12fd663f79458c3f9de25dbff5d110b0cb0ed16d6571041f38"],
+    ["passions", "wonder", 6, 5305688129786, "574f4e644552fa64bb42dd838106d14dce679db9f50c5fff96c32c512beca2a7"],
+    ["passions", "hatred", 1, 94, "689b4a8518d9fc3ca95bc9117fe2e1143e0aa1866d99903517e0a2c8feddbaa4"],
+    ["passions", "hatred", 2, 13824, "68419ebff516f701c4e4b84c9a688e01180879fab07f2b00801ab9fc72d41c4a"],
+    ["passions", "hatred", 3, 22801011, "484154558125fdc48922e3ed39f9d75dc80506648cd19235cacedf545cfc57c6"],
+    ["passions", "hatred", 4, 361636437, "68415452d48a8c13be554c9f2ce8bbdf14deec052821bf574a18f653f35bcf67"],
+    ["passions", "hatred", 5, 177405871603, "6861747265e3000d7ce4ab27dbde94aaed58d4056ae9cdd09119e8d051a8fb0f"],
+    ["passions", "hatred", 6, 8205499123446, "486154526564269084a1e63ffd202dc6ab5cc5e3ff96348cd06ad229a0b36273"],
+    ["passions", "desire", 1, 69, "443a6f4c688de69d9b982002486a9ffb0531eb8712a72416dcdc46afc5457177"],
+    ["passions", "desire", 2, 6654, "6445cb050f9e5243e120cf19ec90822c0afd1708cd345cfddc527e9fbe12b761"],
+    ["passions", "desire", 3, 25184011, "4465736e69e51967d9e7a207e69e88c131d30a86376247b644b407fa9cd2efe4"],
+    ["passions", "desire", 4, 898992540, "4465536946877160b48555ff9efae849b60c1334bdbb1823f5490cef6f99429e"],
+    ["passions", "desire", 5, 40707156856, "644553695211447b7048a5c44dd9558b6e2de0178f8c83f76d11671d4c36f8a1"],
+    ["passions", "desire", 6, 2251505930981, "64457349724573a12591877059633e2abfbd45f3bef1133c9d7f688d8a9e2ddd"],
+    ["passions", "sorrow", 1, 30, "736d49ec8b46958be8cdc245a74615ed72b51c0fb46f8f35f1e388f2f6edf671"],
+    ["passions", "sorrow", 2, 3787, "736fa2e72d967e97eed4b2d5840e94431840f64a19ff62281fd0413be60ddab1"],
+    ["passions", "sorrow", 3, 14004968, "734f7251543f5908ff6eef0490e613b39def15b2988fd7cb65b9122a41f2d993"],
+    ["passions", "sorrow", 4, 60347174, "536f72727f7c0ddf521f04ad79253b9f4fddbc191602e0e0c1354470807cadb8"],
+    ["passions", "sorrow", 5, 26613867023, "736f72724f7c075984c5c2f0c905a66d7283aefe4bf1afedd3eb761344975243"],
+    ["passions", "sorrow", 6, 6727221030135, "736f52724f57c280efaa6eda5ac808a6e2523044fc2245550c6333865173690e"],
+  ];
+
+  const ascii8hex = s => [...s].map(c => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+  const edges = [];
+  for (const [base, word] of rows)
+    if (!edges.some(e => e[0] === base && e[1] === word)) edges.push([base, word]);
+
+  grinding.series = {
+    name: "Passions",
+    slug: "passions",
+    base: "passions",
+    topology: "star_from",
+    searchEncoding: "ascii8",
+    caseMode: "insensitive",
+    hashFunction: "SHA-256",
+    budgetBits: 48,
+    tokenId: 9, // position in the fixed edition; scripts/tokens.js agrees
+    records: edges.map(([base, word], index) => {
+      let prevNonce = 0;
+      const steps = rows.filter(r => r[0] === base && r[1] === word)
+        .map(([, , matchedChars, nonce, hash]) => {
+          const st = { matchedChars, nonce, prevNonce, deltaAttempts: nonce - prevNonce, hash };
+          prevNonce = nonce;
+          return st;
+        });
+      const final = steps[steps.length - 1];
+      return {
+        index,
+        word,
+        base,
+        plaintext: word, // as it appears in the csv
+        totalChars: word.length,
+        matchedChars: final.matchedChars, // < totalChars if the budget ran out
+        full: final.matchedChars === word.length,
+        encodedHex: ascii8hex(word),
+        matchedNibbles: final.matchedChars * 2,
+        nonce: final.nonce,
+        attempts: final.nonce + 1,
+        hash: final.hash,
+        steps
+      };
+    }),
+    words: ["joy","love","wonder","hatred","desire","sorrow"]
+  };
+})();
+
+// Grinding contract connection. Fill in the proxy address after deployment;
+// while it is empty the pages stay fully static and never touch a wallet.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+  grinding.chainConfig = {
+    address: "0xf0f744E57FfC931105EA68b0830009E01631F3aC", // the Grinding proxy on mainnet
+    chainId: 1,
+    chainName: "Ethereum Mainnet",
+    rpcUrl: "" // mainnet is known to every wallet; no add-network offer needed
+  };
+})();
+
+// Chain package — the optional Ethereum side of a page. If the viewer has an
+// Ethereum plugin (window.ethereum) and chain-config.js names the contract,
+// the page can read this token's stored display configuration from the
+// Grinding contract, and its owner can write the current configuration back.
+// Reads use configQuery(tokenId), which returns exactly the query string the
+// page already parses; writes call setTokenConfig(tokenId, config), which
+// the contract restricts to the token's current owner. Everything is plain
+// eth_call / eth_sendTransaction — no wallet library.
+(function () {
+  const grinding = window.grinding = window.grinding || {};
+
+  // selectors, verified against the compiled contract (forge inspect)
+  const SEL = {
+    configQuery: "0x156d1198",     // configQuery(uint256)
+    ownerOf: "0x6352211e",         // ownerOf(uint256)
+    setTokenConfig: "0x48e36746"   // setTokenConfig(uint256,(string x5,uint32 x3,bool))
+  };
+
+  // ---- minimal ABI encoding -----------------------------------------------
+
+  const pad = h => h.padStart(64, "0");
+  const uint = n => pad(BigInt(n).toString(16));
+  const utf8hex = s => [...new TextEncoder().encode(s)]
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+
+  // a dynamic tuple of 5 strings, 3 uint32s, and a bool: heads then tails
+  function encodeConfig(v) {
+    const strings = [v.layout, v.encoding, v.display, v.sizing, v.scheme];
+    const heads = [], tails = [];
+    let tail = 9 * 32; // offsets are from the tuple's own start
+    for (const s of strings) {
+      heads.push(uint(tail));
+      const hex = utf8hex(s || "");
+      const words = uint(hex.length / 2) +
+        (hex ? hex.padEnd(Math.ceil(hex.length / 64) * 64, "0") : "");
+      tails.push(words);
+      tail += words.length / 2;
+    }
+    heads.push(uint(v.drawSeconds), uint(v.pauseSeconds), uint(v.rowPauseSeconds), uint(1));
+    return heads.join("") + tails.join("");
+  }
+
+  const writeCalldata = (tokenId, v) =>
+    SEL.setTokenConfig + uint(tokenId) + uint(0x40) + encodeConfig(v);
+
+  // decode one returned string (offset word, length word, bytes)
+  function decodeString(hex) {
+    const data = hex.replace(/^0x/, "");
+    const len = parseInt(data.slice(64, 128), 16);
+    const bytes = data.slice(128, 128 + len * 2);
+    let out = new Uint8Array(len);
+    for (let i = 0; i < len; i++) out[i] = parseInt(bytes.slice(i * 2, i * 2 + 2), 16);
+    return new TextDecoder().decode(out);
+  }
+
+  // ---- the calls -----------------------------------------------------------
+
+  const eth = () => window.ethereum;
+  const cfg = () => grinding.chainConfig || {};
+  const tokenId = () => grinding.series && grinding.series.tokenId;
+
+  const enabled = () => !!(eth() && cfg().address && tokenId());
+
+  const call = data => eth().request({
+    method: "eth_call",
+    params: [{ to: cfg().address, data }, "latest"]
+  });
+
+  // the stored config as the page's own query string ("" when none is set)
+  async function read() {
+    return decodeString(await call(SEL.configQuery + uint(tokenId())));
+  }
+
+  async function ownerOf() {
+    const ret = await call(SEL.ownerOf + uint(tokenId()));
+    return "0x" + ret.replace(/^0x/, "").slice(24, 64);
+  }
+
+  // prompt the wallet for an account. On the wrong network, ask the wallet
+  // to switch — and to add the network first (from chain-config's rpcUrl)
+  // if it does not know it — rather than writing to a lookalike contract
+  // elsewhere; if the viewer declines, this rejects.
+  async function connect() {
+    if (cfg().chainId != null) {
+      const want = cfg().chainId;
+      const chain = parseInt(await eth().request({ method: "eth_chainId" }), 16);
+      if (chain !== want) {
+        const hexId = "0x" + want.toString(16);
+        try {
+          await eth().request({ method: "wallet_switchEthereumChain", params: [{ chainId: hexId }] });
+        } catch (e) {
+          if (e && e.code === 4902 && cfg().rpcUrl) {
+            // the wallet has never heard of this chain: offer to add it
+            await eth().request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: hexId,
+                chainName: cfg().chainName || "chain " + want,
+                rpcUrls: [cfg().rpcUrl],
+                nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }
+              }]
+            });
+            await eth().request({ method: "wallet_switchEthereumChain", params: [{ chainId: hexId }] });
+          } else {
+            throw new Error("wallet is on chain " + chain + ", the contract is on " + want);
+          }
+        }
+      }
+    }
+    const accounts = await eth().request({ method: "eth_requestAccounts" });
+    return accounts[0];
+  }
+
+  // owner-only: setTokenConfig(tokenId, values); resolves to the tx hash
+  async function write(from, values) {
+    return eth().request({
+      method: "eth_sendTransaction",
+      params: [{ from, to: cfg().address, data: writeCalldata(tokenId(), values) }]
+    });
+  }
+
+  grinding.chain = {
+    enabled, read, ownerOf, connect, write, tokenId,
+    _abi: { encodeConfig, writeCalldata, decodeString } // exposed for tests
+  };
+})();
+
+// Page wiring — vanilla DOM around the artwork packages. One piece is built
+// per (layout, encoding); painting is the sketch's single path: an integer
+// frame in, pixels out.
+(function () {
+  const R = window.grinding;
+  const series = R.series;
+
+  // schemes live in the stylesheet as body-class variable sets; the drawing
+  // reads the computed values so chrome and artwork always agree
+  const schemeOrder = [
+    ["paper", "black on white"], ["night", "white on black"],
+    ["video", "green on black"], ["inverse", "black on green"]
+  ];
+  function currentTheme() {
+    const cs = getComputedStyle(document.body);
+    const v = name => cs.getPropertyValue(name).trim();
+    return {
+      ground: v("--ground"), ink: v("--ink"), grid: v("--grid"), ruleSoft: v("--rule-soft"),
+      magic: v("--magic"), magicWeight: v("--magic-weight") || "400"
+    };
+  }
+
+  const encodingOrder = ["rgb12", "grey4", "duo8"];
+
+  const $ = id => document.getElementById(id);
+  const host = $("host");
+  const fmt = n => n.toLocaleString("en-US");
+
+  // ---- defaults & tuning --------------------------------------------------
+  const DEFAULTS = {
+    layout: "gutter", encoding: "rgb12", display: "squares", sizing: "fit",
+    scheme: "paper", drawSeconds: 120, pauseSeconds: 60, rowPauseSeconds: 2
+  };
+  const DISPLAYS = [["squares", "squares"], ["circles", "circles"], ["hex", "hex"], ["ascii", "ascii text"]];
+  const SIZINGS = [["fit", "fitted"], ["shrink", "shrink"], ["fill", "grow"], ["overlap", "overlap"]];
+  const FAN_LAYOUTS = ["radial", "rosette", "spiral"]; // element sizing applies here...
+  const BLOCK_DISPLAYS = ["squares", "circles"];       // ...in these displays
+  const CONFIG_FADE_MS = 10000;    // the config button fades after this much quiet
+  const DARK_CHANNEL_FLOOR = 48;   // colour floor on black grounds
+  const DARK_SCHEMES = ["night", "video"];
+
+  const state = { ...DEFAULTS, running: false };
+
+  // ---- url configuration --------------------------------------------------
+  // any config option can be set with query parameters, e.g.
+  //   ?layout=rosette&display=circles&size=shrink&scheme=video
+  //   &encoding=grey4&duration=20&pause=0&rowpause=1&save=final
+  // save=final downloads the finished state once loaded; save=<frame>
+  // downloads that frame instead.
+  const params = new URLSearchParams(location.search);
+  const pick = (key, allowed) => {
+    const v = params.get(key);
+    return v !== null && allowed.includes(v) ? v : null;
+  };
+  const pickNumber = key => {
+    const v = Number(params.get(key));
+    return params.has(key) && Number.isFinite(v) && v >= 0 ? v : null;
+  };
+  state.layout = pick("layout", R.layout.layoutNames) ?? state.layout;
+  state.display = pick("display", DISPLAYS.map(d => d[0])) ?? state.display;
+  state.sizing = pick("size", SIZINGS.map(s => s[0])) ?? state.sizing;
+  state.encoding = pick("encoding", encodingOrder) ?? state.encoding;
+  state.scheme = pick("scheme", schemeOrder.map(s => s[0])) ?? state.scheme;
+  state.drawSeconds = pickNumber("duration") ?? state.drawSeconds;
+  state.pauseSeconds = pickNumber("pause") ?? state.pauseSeconds;
+  state.rowPauseSeconds = pickNumber("rowpause") ?? state.rowPauseSeconds;
+  document.body.className = "scheme-" + state.scheme;
+
+  // black grounds raise the colour floor so zero bytes don't vanish
+  const channelFloor = () => DARK_SCHEMES.includes(state.scheme) ? DARK_CHANNEL_FLOOR : undefined;
+  let piece = null, view = null, painted = 0, frame = 0;
+  let timer = null, startFrame = 0, t0 = 0;
+
+  // ---- config dialog ------------------------------------------------------
+
+  function optButton(bar, key, label, pick) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.key = key;
+    b.textContent = label;
+    b.addEventListener("click", pick);
+    bar.appendChild(b);
+  }
+
+  const layoutBar = $("layout-buttons");
+  for (const name of R.layout.layoutNames)
+    optButton(layoutBar, name, name, () => { state.layout = name; rebuild(); });
+
+  const encodingBar = $("encoding-buttons");
+  for (const key of encodingOrder)
+    optButton(encodingBar, key, R.colour.encodings[key].label, () => { state.encoding = key; rebuild(); });
+
+  const displayBar = $("display-buttons");
+  for (const [key, label] of DISPLAYS)
+    optButton(displayBar, key, label, () => { state.display = key; rebuild(); });
+
+  const sizingBar = $("sizing-buttons");
+  for (const [key, label] of SIZINGS)
+    optButton(sizingBar, key, label, () => { state.sizing = key; rebuild(); });
+
+  const schemeBar = $("scheme-buttons");
+  for (const [key, label] of schemeOrder)
+    optButton(schemeBar, key, label, () => {
+      state.scheme = key;
+      document.body.className = "scheme-" + key;
+      rebuild();
+    });
+
+  function syncControls() {
+    [...layoutBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.layout));
+    [...encodingBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.encoding));
+    [...displayBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.display));
+    // element size only means something where the geometry fans out
+    const sizingApplies = FAN_LAYOUTS.includes(state.layout)
+      && BLOCK_DISPLAYS.includes(state.display);
+    [...sizingBar.children].forEach(b => {
+      b.classList.toggle("active", b.dataset.key === state.sizing);
+      b.disabled = !sizingApplies;
+    });
+    [...schemeBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.scheme));
+    $("cell-count").textContent = piece ? (piece.textual ? piece.glyphs : piece.cols) : "—";
+  }
+
+  // visible at startup and on mouse move / tap; fades after 10s of quiet.
+  // ?chrome=off removes it entirely — for capture, kiosks, and previews,
+  // where the plate is the whole composition
+  const configBtn = $("config-open");
+  let configHideTimer = null;
+  function wakeConfig() {
+    configBtn.classList.remove("faded");
+    clearTimeout(configHideTimer);
+    configHideTimer = setTimeout(() => configBtn.classList.add("faded"), CONFIG_FADE_MS);
+  }
+  if (params.get("chrome") === "off") {
+    configBtn.style.display = "none";
+  } else {
+    addEventListener("mousemove", wakeConfig);
+    addEventListener("touchstart", wakeConfig, { passive: true });
+    wakeConfig();
+  }
+
+  const dialog = $("config");
+  $("config-open").addEventListener("click", () => dialog.showModal());
+  $("config-close").addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });
+
+  function numberInput(id, key) {
+    const input = $(id);
+    input.value = state[key];
+    input.addEventListener("change", () => {
+      state[key] = Math.max(0, Number(input.value) || 0);
+      input.value = state[key];
+      rebuild();
+    });
+  }
+  numberInput("duration", "drawSeconds");
+  numberInput("pause", "pauseSeconds");
+  numberInput("row-pause", "rowPauseSeconds");
+
+  $("save-frame").addEventListener("click", () => {
+    const ph = R.artwork.phaseAtFrame(piece, frame);
+    save(frame, "frame-" + String(ph.frame).padStart(4, "0"));
+  });
+  $("save-final").addEventListener("click", () => save(piece.finalFrame, "final"));
+
+  function save(f, suffix) {
+    if (!piece) return;
+    const svg = R.artwork.svgAtFrame(piece, f, currentTheme());
+    R.render.download(series.slug + "-" + state.layout + "-" + suffix + ".svg", svg);
+  }
+
+  // ---- build & paint ------------------------------------------------------
+
+  function rebuild() {
+    stop();
+    piece = R.artwork.build({
+      layout: state.layout, encoding: state.encoding, display: state.display,
+      sizing: state.sizing,
+      drawSeconds: state.drawSeconds, holdSeconds: state.pauseSeconds,
+      rowPauseSeconds: state.rowPauseSeconds, channelFloor: channelFloor()
+    });
+    view = R.render.mount(host, piece.model, currentTheme());
+    frame = piece.finalFrame;
+    painted = 0;
+    paintFrame(frame);
+    alignTelemetry();
+    syncControls();
+    // any (re)build starts a fresh run; duration 0 stays on the final state
+    if (state.drawSeconds !== 0) start();
+  }
+
+  // line the telemetry's thick bar up with the drawing's top rule (the SVG
+  // letterboxes inside its column, so the rule's page position is computed)
+  function alignTelemetry() {
+    const head = document.querySelector(".telemetry .head");
+    if (!head) return;
+    if (piece.model.topRuleY == null) { head.style.marginTop = ""; return; }
+    const hostH = host.clientHeight, hostW = host.clientWidth;
+    const drawingH = Math.min(hostH, hostW * piece.model.height / piece.model.width);
+    const ruleY = (hostH - drawingH) / 2 + drawingH * piece.model.topRuleY / piece.model.height;
+    head.style.marginTop = Math.max(0, Math.round(ruleY - (head.offsetHeight - 3))) + "px";
+  }
+
+  function paintFrame(f) {
+    const ph = R.artwork.phaseAtFrame(piece, f);
+    view.setHeader(ph.header !== false);
+    if (ph.locked < painted) {
+      for (let i = 0; i < piece.searches.length; i++) view.clearRow(i);
+      painted = 0;
+    }
+    const upTo = ph.done ? piece.searches.length : ph.locked;
+    for (let i = painted; i < upTo; i++) view.fillRow(i, piece.real[i], piece.magic[i]);
+    painted = upTo;
+    if (!ph.done && !ph.resting && ph.current >= 0) {
+      const live = R.artwork.liveCells(piece, ph);
+      view.fillRow(ph.current, live.colours, live.magic, false);
+    }
+    const matched = piece.searches.map((r, i) =>
+      (ph.done || i < ph.locked) ? (r.matchedChars ?? r.totalChars) : (i === ph.current ? ph.achieved : 0));
+    view.setLabels(piece.searches, ph.done ? -1 : ph.current, { liveNonce: ph.nonce, matched });
+    readouts(ph);
+    return ph;
+  }
+
+  function start() {
+    if (timer) return;
+    // restart the clock from the top when sitting in the final hold,
+    // otherwise the loop would play out the remaining hold before wrapping
+    startFrame = frame >= piece.finalFrame ? 0 : frame;
+    frame = startFrame;
+    paintFrame(frame);
+    t0 = performance.now();
+    const fps = piece.fps;
+    timer = setInterval(() => {
+      if (document.hidden || !view) return;
+      frame = startFrame + Math.round((performance.now() - t0) / 1000 * fps);
+      // pause 0: run the cycle once and freeze on the final state
+      if (state.pauseSeconds === 0 && frame >= piece.finalFrame) { stop(); return; }
+      paintFrame(frame);
+    }, Math.round(1000 / fps));
+    state.running = true;
+    syncControls();
+  }
+
+  function stop() {
+    clearInterval(timer);
+    timer = null;
+    state.running = false;
+    if (view && piece) { frame = piece.finalFrame; paintFrame(frame); }
+    syncControls();
+  }
+
+  // ---- telemetry ----------------------------------------------------------
+
+  // telemetry may be commented out of the page; every write is optional
+  const put = (id, value) => { const n = $(id); if (n) n.textContent = value; };
+
+  function readouts(ph) {
+    const i = ph.done ? piece.searches.length - 1 : Math.max(0, ph.current);
+    const s = piece.searches[i];
+    const m = ph.done ? (s.matchedChars ?? s.totalChars) : Math.max(0, ph.achieved);
+    put("t-search", String(i + 1).padStart(2, "0"));
+    const target = $("t-target");
+    if (target) {
+      target.textContent = "";
+      target.appendChild(document.createTextNode(s.plaintext.slice(0, m)));
+      const tail = document.createElement("span");
+      tail.className = "u";
+      tail.textContent = s.plaintext.slice(m);
+      target.appendChild(tail);
+    }
+    put("t-match", m + " / " + s.totalChars);
+    put("t-encoded", s.encodedHex.slice(0, m * 2) || "—");
+    put("t-nonce", fmt(ph.nonce));
+    put("t-step", fmt(ph.step));
+    const status = $("status");
+    if (status) {
+      status.textContent = ph.done ? "Series complete" : "Searching " + s.plaintext;
+      status.classList.toggle("done", ph.done);
+    }
+  }
+
+  // ---- fit the 16:9 composition to the window -----------------------------
+
+  const page = document.querySelector(".plate-page");
+  const DESIGN = { w: 1920, h: 1080 };
+  function fitPage() {
+    const s = Math.min(innerWidth / DESIGN.w, innerHeight / DESIGN.h);
+    page.style.transform = "scale(" + s + ")";
+    page.style.left = (innerWidth - DESIGN.w * s) / 2 + "px";
+    page.style.top = (innerHeight - DESIGN.h * s) / 2 + "px";
+  }
+  addEventListener("resize", fitPage);
+  fitPage();
+
+  // ---- static page text ---------------------------------------------------
+
+  document.title = series.name + " — Grinding";
+  put("series-name", series.name);
+  const totals = R.artwork.totals(series.records);
+  put("total-searches", String(totals.searches));
+  put("total-matches", String(totals.matches));
+  put("total-hashes", fmt(totals.attempts));
+
+  rebuild();
+
+  // ---- chain ---------------------------------------------------------------
+  // with an Ethereum plugin and a configured contract (chain-config.js), the
+  // token's stored display configuration fills in whatever the URL leaves
+  // unsaid — an explicit query parameter always wins — and the token's owner
+  // can write the current configuration back from the Config dialog. The
+  // contract enforces ownership; the page checks it first to say so plainly.
+  const chain = R.chain;
+  if (chain && chain.enabled()) {
+    chain.read().then(stored => {
+      if (!stored) return; // nothing written on chain yet
+      const sp = new URLSearchParams(stored.replace(/^\?/, ""));
+      const take = (key, allowed, apply) => {
+        if (params.has(key) || !sp.has(key)) return false;
+        const v = sp.get(key);
+        if (allowed && !allowed.includes(v)) return false;
+        apply(v);
+        return true;
+      };
+      const takeNumber = (key, apply) => take(key, null, v => apply(Number(v)));
+      let changed = false;
+      changed = take("layout", R.layout.layoutNames, v => { state.layout = v; }) || changed;
+      changed = take("encoding", encodingOrder, v => { state.encoding = v; }) || changed;
+      changed = take("display", DISPLAYS.map(d => d[0]), v => { state.display = v; }) || changed;
+      changed = take("size", SIZINGS.map(s => s[0]), v => { state.sizing = v; }) || changed;
+      changed = take("scheme", schemeOrder.map(s => s[0]), v => {
+        state.scheme = v;
+        document.body.className = "scheme-" + v;
+      }) || changed;
+      changed = takeNumber("duration", v => { state.drawSeconds = Math.max(0, v || 0); }) || changed;
+      changed = takeNumber("pause", v => { state.pauseSeconds = Math.max(0, v || 0); }) || changed;
+      changed = takeNumber("rowpause", v => { state.rowPauseSeconds = Math.max(0, v || 0); }) || changed;
+      if (changed) {
+        $("duration").value = state.drawSeconds;
+        $("pause").value = state.pauseSeconds;
+        $("row-pause").value = state.rowPauseSeconds;
+        rebuild();
+      }
+    }).catch(() => {}); // an unreachable chain loses the viewer nothing
+  }
+
+  const chainSection = $("chain-section");
+  if (chain && chain.enabled() && chainSection) {
+    chainSection.hidden = false;
+    const status = $("chain-status");
+    // the transaction hash gets its own full-width line at the bottom of the
+    // section; inline beside the button it forces the dialog wide open
+    const txLine = $("chain-tx");
+    const showTx = hash => {
+      if (!txLine) return;
+      txLine.textContent = hash;
+      txLine.hidden = false;
+    };
+    $("chain-save").addEventListener("click", async () => {
+      try {
+        if (txLine) txLine.hidden = true;
+        status.textContent = "connecting…";
+        const account = await chain.connect();
+        const owner = await chain.ownerOf();
+        if (owner.toLowerCase() !== account.toLowerCase()) {
+          status.textContent = "only the owner of token " + chain.tokenId() +
+            " may write; " + account.slice(0, 10) + "… does not own it";
+          return;
+        }
+        status.textContent = "confirm in the wallet…";
+        const tx = await chain.write(account, {
+          layout: state.layout, encoding: state.encoding, display: state.display,
+          sizing: state.sizing, scheme: state.scheme,
+          drawSeconds: state.drawSeconds, pauseSeconds: state.pauseSeconds,
+          rowPauseSeconds: state.rowPauseSeconds
+        });
+        status.textContent = "sent";
+        showTx(tx);
+      } catch (e) {
+        status.textContent = e && e.message ? e.message : "failed";
+      }
+    });
+  }
+
+  // ?save=final (or a frame number) downloads that state once loaded
+  const saveParam = params.get("save");
+  if (saveParam === "final") save(piece.finalFrame, "final");
+  else if (saveParam && /^\d+$/.test(saveParam)) save(Number(saveParam), "frame-" + saveParam.padStart(4, "0"));
+})();
+
+</script>
 
 </body>
 </html>
