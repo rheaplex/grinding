@@ -22,3 +22,6 @@ app/_*
 # The CAR is rebuilt by scripts/upload-ipfs.sh --car; ipfs-cids.env is the
 # committable record of what it contained
 grinding.car
+
+# Deployment environment (RPC keys, admin address)
+.deploy.env

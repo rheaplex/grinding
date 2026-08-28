@@ -60,6 +60,14 @@ test("metadata follows the Transient Labs structure", { skip: !havePreviews }, (
     assert.equal(m.media.size, String(fs.statSync(path.join(ROOT, "app", t.page)).size));
     assert.match(m.media.dimensions, /^\d+x\d+$/);
   }
+
+  // the ERC-7572 collection metadata sits beside the token files
+  const c = JSON.parse(fs.readFileSync(path.join(dir, "collection"), "utf8"));
+  assert.equal(c.name, "Grinding");
+  assert.ok(c.description.length > 0);
+  assert.equal(c.image, `ipfs://${IMAGES_CID}/1.png`);
+  assert.ok(c.external_link.startsWith("http"));
+
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

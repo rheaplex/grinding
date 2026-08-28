@@ -96,3 +96,21 @@ if (TOKENS.length < TOKEN_COUNT) {
     `tokenURI will 404 for the missing ids until scripts/tokens.js is filled in`
   );
 }
+
+// Collection metadata for ERC-7572 contractURI() — OpenSea reads this for
+// the collection name, description, and image. Lives beside the token files,
+// so CONTRACT_URI = <base URI>/collection.
+const collection = {
+  name: "Grinding",
+  description:
+    "Proof-of-work text search. Each candidate hashes a base with a counter " +
+    "appended; the grind climbs successively longer prefix matches until the " +
+    "SHA-256 hash spells its target word. Twelve works, each one base and its " +
+    "found words, drawn from the real search records — every hash shown was " +
+    "actually found. Rhea Myers, 2026.",
+  image: `ipfs://${IMAGES_CID}/1.png`,
+  external_link: SHOW_URL_BASE,
+};
+const collectionFile = path.join(META_DIR, "collection");
+fs.writeFileSync(collectionFile, JSON.stringify(collection, null, 2) + "\n");
+console.log(`collection: ${path.relative(ROOT, collectionFile)}`);

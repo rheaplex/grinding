@@ -1,0 +1,6 @@
+{
+  "name": "Grinding",
+  "description": "Proof-of-work text search. Each candidate hashes a base with a counter appended; the grind climbs successively longer prefix matches until the SHA-256 hash spells its target word. Twelve works, each one base and its found words, drawn from the real search records — every hash shown was actually found. Rhea Myers, 2026.",
+  "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/1.png",
+  "external_link": "https://show.rhea.art/grinding/"
+}

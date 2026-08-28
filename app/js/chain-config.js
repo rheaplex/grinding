@@ -3,10 +3,9 @@
 (function () {
   const grinding = window.grinding = window.grinding || {};
   grinding.chainConfig = {
-    address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", // local anvil rehearsal
-    chainId: 31337,
-    // used to offer adding the network to a wallet that lacks it
-    chainName: "Anvil (local)",
-    rpcUrl: "http://127.0.0.1:8545"
+    address: "0xf0f744E57FfC931105EA68b0830009E01631F3aC", // the Grinding proxy on mainnet
+    chainId: 1,
+    chainName: "Ethereum Mainnet",
+    rpcUrl: "" // mainnet is known to every wallet; no add-network offer needed
   };
 })();
