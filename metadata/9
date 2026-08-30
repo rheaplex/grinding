@@ -45,11 +45,11 @@
   ],
   "image": "ipfs://bafybeien5e2wzxzvap3ebnowoxwfpyqbbj6ydvfuq4v5rllpxwhg47bs2m/9.png",
   "image_sha256": "554153c6ff1320ae6907a7ad24d74fb305f05bc488637e8b5119d6ca07c31fbf",
-  "animation_url": "ipfs://bafybeifalbthcix5hv5oa72rd2r27yk3eihzt7wp3yrkv4k2j22echemrm/passions.html",
-  "animation_sha256": "0579964991b3d54f215a52fff308ff36b34d0b6564fe63ffc8161719224ba4e0",
+  "animation_url": "ipfs://bafybeidnkggs4kknqxucio5ewqq4fmhyiaexnb3cq5xbhbmdno7mynlqf4/passions.html",
+  "animation_sha256": "dd64ef4aa987cffe2e11f12bd8bb705319a546ae386d5ab8050097fb8fd3b1cc",
   "media": {
-    "uri": "ipfs://bafybeifalbthcix5hv5oa72rd2r27yk3eihzt7wp3yrkv4k2j22echemrm/passions.html",
-    "size": "125135",
+    "uri": "ipfs://bafybeidnkggs4kknqxucio5ewqq4fmhyiaexnb3cq5xbhbmdno7mynlqf4/passions.html",
+    "size": "126985",
     "dimensions": "1920x1080",
     "mimeType": "text/html"
   }

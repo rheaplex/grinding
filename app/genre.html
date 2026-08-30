@@ -2473,7 +2473,8 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
   //   ?layout=rosette&display=circles&size=shrink&scheme=video
   //   &encoding=grey4&duration=20&pause=0&rowpause=1&save=final
   // save=final downloads the finished state once loaded; save=<frame>
-  // downloads that frame instead.
+  // downloads that frame instead. kiosk=true walks the display options at
+  // random, one step per cycle (see the kiosk section).
   const params = new URLSearchParams(location.search);
   const pick = (key, allowed) => {
     const v = params.get(key);
@@ -2483,6 +2484,8 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
     const v = Number(params.get(key));
     return params.has(key) && Number.isFinite(v) && v >= 0 ? v : null;
   };
+  // switches accept the usual spellings: ?kiosk=true|on|1, ?chrome=off|false|0
+  const pickFlag = (key, spellings) => spellings.includes((params.get(key) || "").toLowerCase());
   state.layout = pick("layout", R.layout.layoutNames) ?? state.layout;
   state.display = pick("display", DISPLAYS.map(d => d[0])) ?? state.display;
   state.sizing = pick("size", SIZINGS.map(s => s[0])) ?? state.sizing;
@@ -2533,16 +2536,17 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
       rebuild();
     });
 
+  // element size only means something where the geometry fans out
+  const sizingApplies = () => FAN_LAYOUTS.includes(state.layout)
+    && BLOCK_DISPLAYS.includes(state.display);
+
   function syncControls() {
     [...layoutBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.layout));
     [...encodingBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.encoding));
     [...displayBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.display));
-    // element size only means something where the geometry fans out
-    const sizingApplies = FAN_LAYOUTS.includes(state.layout)
-      && BLOCK_DISPLAYS.includes(state.display);
     [...sizingBar.children].forEach(b => {
       b.classList.toggle("active", b.dataset.key === state.sizing);
-      b.disabled = !sizingApplies;
+      b.disabled = !sizingApplies();
     });
     [...schemeBar.children].forEach(b => b.classList.toggle("active", b.dataset.key === state.scheme));
     $("cell-count").textContent = piece ? (piece.textual ? piece.glyphs : piece.cols) : "—";
@@ -2558,7 +2562,7 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
     clearTimeout(configHideTimer);
     configHideTimer = setTimeout(() => configBtn.classList.add("faded"), CONFIG_FADE_MS);
   }
-  if (params.get("chrome") === "off") {
+  if (pickFlag("chrome", ["off", "false", "0"])) {
     configBtn.style.display = "none";
   } else {
     addEventListener("mousemove", wakeConfig);
@@ -2596,6 +2600,30 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
     R.render.download(series.slug + "-" + state.layout + "-" + suffix + ".svg", svg);
   }
 
+  // ---- kiosk --------------------------------------------------------------
+  // ?kiosk=true walks the display options at random: each time a cycle
+  // completes, one of layout, hash display, element size, scheme, or
+  // encoding steps to a different value and the piece rebuilds. Timing is
+  // left alone, so the URL (or the chain) still sets the pace; a still
+  // (duration 0) moves on after its pause instead
+  const kiosk = pickFlag("kiosk", ["true", "on", "1"]);
+  const KIOSK_OPTIONS = [
+    ["layout", () => R.layout.layoutNames],
+    ["display", () => DISPLAYS.map(d => d[0])],
+    ["sizing", () => sizingApplies() ? SIZINGS.map(s => s[0]) : []],
+    ["scheme", () => schemeOrder.map(s => s[0])],
+    ["encoding", () => encodingOrder]
+  ];
+  const pickRandom = list => list[Math.floor(Math.random() * list.length)];
+  let kioskTimer = null;
+  function kioskStep() {
+    // only options with somewhere visible to step to
+    const [key, values] = pickRandom(KIOSK_OPTIONS.filter(([, v]) => v().length > 1));
+    state[key] = pickRandom(values().filter(v => v !== state[key]));
+    if (key === "scheme") document.body.className = "scheme-" + state.scheme;
+    rebuild();
+  }
+
   // ---- build & paint ------------------------------------------------------
 
   function rebuild() {
@@ -2614,6 +2642,7 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
     syncControls();
     // any (re)build starts a fresh run; duration 0 stays on the final state
     if (state.drawSeconds !== 0) start();
+    else if (kiosk) kioskTimer = setTimeout(kioskStep, Math.max(1, state.pauseSeconds) * 1000);
   }
 
   // line the telemetry's thick bar up with the drawing's top rule (the SVG
@@ -2661,6 +2690,9 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
     timer = setInterval(() => {
       if (document.hidden || !view) return;
       frame = startFrame + Math.round((performance.now() - t0) / 1000 * fps);
+      // a kiosk moves on once the cycle (with no hold, the drawing) is done
+      const cycleEnd = state.pauseSeconds === 0 ? piece.finalFrame : piece.frames;
+      if (kiosk && frame >= cycleEnd) { kioskStep(); return; }
       // pause 0: run the cycle once and freeze on the final state
       if (state.pauseSeconds === 0 && frame >= piece.finalFrame) { stop(); return; }
       paintFrame(frame);
@@ -2672,6 +2704,8 @@ dialog#config::backdrop { background: rgba(22, 22, 26, 0.4); }
   function stop() {
     clearInterval(timer);
     timer = null;
+    clearTimeout(kioskTimer);
+    kioskTimer = null;
     state.running = false;
     if (view && piece) { frame = piece.finalFrame; paintFrame(frame); }
     syncControls();
