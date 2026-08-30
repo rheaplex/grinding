@@ -19,6 +19,11 @@ display of the proof-of-work text searches rendered by the web app in `../app/`.
 - **Admin-set metadata, IPFS-ready.** `setBaseURI("ipfs://<cid>/")` makes
   `tokenURI(n)` resolve to `ipfs://<cid>/<n>`. `setContractURI` sets the
   ERC-7572 collection metadata OpenSea reads.
+- **Admin-set royalty (ERC-2981).** `setDefaultRoyalty(receiver, bps)` makes
+  every token's `royaltyInfo` report `bps`/10,000 of the sale price to
+  `receiver` (`deleteDefaultRoyalty` removes it). OpenSea reads this directly;
+  the SuperRare Bazaar reads it through Manifold's Royalty Registry engine,
+  which resolves ERC-2981 with no registration needed.
 - **Marketplace freshness.** Base-URI and config changes emit ERC-4906
   `MetadataUpdate` / `BatchMetadataUpdate` events (and `supportsInterface`
   advertises `0x49064906`), so OpenSea re-fetches metadata after changes.
@@ -34,7 +39,39 @@ forge script script/Grinding.s.sol:Deploy --rpc-url $RPC --broadcast
 
 # upgrade an existing proxy (sender must be the admin)
 PROXY=0x... forge script script/Grinding.s.sol:Upgrade --rpc-url $RPC --broadcast
+
+# the royalties upgrade: new implementation and setDefaultRoyalty in one
+# transaction (ROYALTY_BPS defaults to 1000 = 10%, ROYALTY_RECEIVER to the admin)
+PROXY=0x... forge script script/Grinding.s.sol:UpgradeRoyalties --rpc-url $RPC --broadcast
+
+# rehearse that upgrade against the live proxy on a mainnet fork first
+MAINNET_RPC_URL=$RPC forge test --match-contract Mainnet -vv
 ```
+
+`Deploy` also sets the royalty on a fresh proxy when the sender is the admin.
+
+## Marketplaces
+
+The contract needs nothing marketplace-specific on chain. Listing is a
+per-wallet ERC-721 `setApprovalForAll` of the marketplace's operator contract,
+covering every token that wallet holds:
+
+| marketplace | operator | address |
+| --- | --- | --- |
+| OpenSea | Seaport conduit | `0x1E0049783F008A0085193E00003D00cd54003c71` |
+| SuperRare | Bazaar | `0x6D7c44773C52D396F43c2D511B81aa168E9a7a42` |
+
+```sh
+# approve (or, with APPROVED=false, revoke) an operator for the sender's tokens
+PROXY=0x... OPERATOR=superrare forge script script/Grinding.s.sol:ApproveOperator --rpc-url $RPC --broadcast
+PROXY=0x... OPERATOR=opensea   forge script script/Grinding.s.sol:ApproveOperator --rpc-url $RPC --broadcast
+```
+
+Both marketplaces read the ERC-2981 royalty: OpenSea directly, SuperRare's
+Bazaar through Manifold's Royalty Registry engine. SuperRare's site indexes
+external contracts only on request from an onboarded creator (its self-service
+import covers Transient Labs and Manifold contracts), so ask their support to
+index the proxy.
 
 ## Etherscan verification
 

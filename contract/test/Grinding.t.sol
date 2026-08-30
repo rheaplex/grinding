@@ -5,8 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
+import {IERC2981} from "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {ERC2981Upgradeable} from "@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol";
 import {Grinding} from "../src/Grinding.sol";
 
 /// A second implementation version, proving state survives an upgrade and the
@@ -120,6 +122,77 @@ contract GrindingTest is Test {
         assertTrue(token.supportsInterface(0x49064906)); // ERC-4906
         assertTrue(token.supportsInterface(0x80ac58cd)); // ERC-721
         assertTrue(token.supportsInterface(0x5b5e139f)); // ERC-721 metadata
+        assertTrue(token.supportsInterface(0x2a55205a)); // ERC-2981
+        assertEq(type(IERC2981).interfaceId, bytes4(0x2a55205a));
+    }
+
+    // ---- royalties ----------------------------------------------------------
+
+    address artist = makeAddr("artist");
+
+    function test_no_royalty_until_set() public view {
+        (address receiver, uint256 amount) = token.royaltyInfo(1, 1 ether);
+        assertEq(receiver, address(0));
+        assertEq(amount, 0);
+    }
+
+    function test_admin_sets_default_royalty_for_every_token() public {
+        vm.expectEmit();
+        emit Grinding.DefaultRoyaltySet(artist, 1000);
+        vm.prank(admin);
+        token.setDefaultRoyalty(artist, 1000); // 10%
+
+        for (uint256 id = 1; id <= 12; id++) {
+            (address receiver, uint256 amount) = token.royaltyInfo(id, 1 ether);
+            assertEq(receiver, artist);
+            assertEq(amount, 0.1 ether);
+        }
+        // the royalty is a property of the collection, not of who holds a token
+        vm.prank(admin);
+        token.transferFrom(admin, collector, 4);
+        (address r, uint256 a) = token.royaltyInfo(4, 200);
+        assertEq(r, artist);
+        assertEq(a, 20);
+    }
+
+    function test_admin_deletes_default_royalty() public {
+        vm.startPrank(admin);
+        token.setDefaultRoyalty(artist, 500);
+        vm.expectEmit();
+        emit Grinding.DefaultRoyaltySet(address(0), 0);
+        token.deleteDefaultRoyalty();
+        vm.stopPrank();
+
+        (address receiver, uint256 amount) = token.royaltyInfo(1, 1 ether);
+        assertEq(receiver, address(0));
+        assertEq(amount, 0);
+    }
+
+    function test_non_admin_cannot_touch_royalty() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, stranger)
+        );
+        vm.prank(stranger);
+        token.setDefaultRoyalty(stranger, 1000);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, collector)
+        );
+        vm.prank(collector);
+        token.deleteDefaultRoyalty();
+    }
+
+    function test_royalty_rejects_bad_values() public {
+        vm.startPrank(admin);
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC2981Upgradeable.ERC2981InvalidDefaultRoyalty.selector, 10_001, 10_000)
+        );
+        token.setDefaultRoyalty(artist, 10_001);
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC2981Upgradeable.ERC2981InvalidDefaultRoyaltyReceiver.selector, address(0))
+        );
+        token.setDefaultRoyalty(address(0), 1000);
+        vm.stopPrank();
     }
 
     // ---- per-token configuration --------------------------------------------
@@ -322,5 +395,89 @@ contract GrindingTest is Test {
         );
         vm.prank(stranger);
         token.upgradeToAndCall(v2, "");
+    }
+
+    /// The royalties upgrade as the script performs it: new implementation
+    /// and setDefaultRoyalty in one call, authorised by the admin's
+    /// msg.sender carrying through the delegatecall.
+    function test_upgrade_sets_royalty_atomically() public {
+        vm.prank(admin);
+        token.setTokenConfig(2, someConfig());
+
+        address impl = address(new Grinding());
+        vm.prank(admin);
+        token.upgradeToAndCall(impl, abi.encodeCall(Grinding.setDefaultRoyalty, (artist, 1000)));
+
+        (address receiver, uint256 amount) = token.royaltyInfo(2, 1 ether);
+        assertEq(receiver, artist);
+        assertEq(amount, 0.1 ether);
+        assertEq(token.tokenConfig(2).layout, "rosette");
+        assertEq(token.owner(), admin);
+
+        // the royalty call inside the upgrade is still admin-only
+        vm.expectRevert(
+            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, stranger)
+        );
+        vm.prank(stranger);
+        token.upgradeToAndCall(impl, abi.encodeCall(Grinding.setDefaultRoyalty, (stranger, 1000)));
+    }
+}
+
+/// Manifold's Royalty Engine, which the SuperRare Bazaar (and others) query
+/// on every sale.
+interface IRoyaltyEngine {
+    function getRoyaltyView(address tokenAddress, uint256 tokenId, uint256 value)
+        external
+        view
+        returns (address payable[] memory recipients, uint256[] memory amounts);
+}
+
+/// The upgrade rehearsed against the live mainnet proxy. Runs only when
+/// MAINNET_RPC_URL is set:
+///   MAINNET_RPC_URL=https://... forge test --match-contract Mainnet -vv
+contract GrindingMainnetUpgradeTest is Test {
+    Grinding constant PROXY = Grinding(0xf0f744E57FfC931105EA68b0830009E01631F3aC);
+    IRoyaltyEngine constant ENGINE = IRoyaltyEngine(0x0385603ab55642cb4Dd5De3aE9e306809991804f);
+
+    function test_mainnet_upgrade_keeps_state_and_engine_pays_royalty() public {
+        string memory rpc = vm.envOr("MAINNET_RPC_URL", string(""));
+        vm.skip(bytes(rpc).length == 0);
+        vm.createSelectFork(rpc);
+
+        address admin = PROXY.owner();
+        address[12] memory holders;
+        for (uint256 id = 1; id <= 12; id++) {
+            holders[id - 1] = PROXY.ownerOf(id);
+        }
+        string memory uri1 = PROXY.tokenURI(1);
+        string memory collection = PROXY.contractURI();
+        string memory query1 = PROXY.configQuery(1);
+        assertFalse(PROXY.supportsInterface(0x2a55205a), "already upgraded?");
+        (address payable[] memory before,) = ENGINE.getRoyaltyView(address(PROXY), 1, 1 ether);
+        assertEq(before.length, 0, "engine already pays a royalty");
+
+        address impl = address(new Grinding());
+        vm.prank(admin);
+        PROXY.upgradeToAndCall(impl, abi.encodeCall(Grinding.setDefaultRoyalty, (admin, 1000)));
+
+        assertEq(PROXY.owner(), admin);
+        for (uint256 id = 1; id <= 12; id++) {
+            assertEq(PROXY.ownerOf(id), holders[id - 1]);
+        }
+        assertEq(PROXY.tokenURI(1), uri1);
+        assertEq(PROXY.contractURI(), collection);
+        assertEq(PROXY.configQuery(1), query1);
+        assertTrue(PROXY.supportsInterface(0x2a55205a));
+
+        (address receiver, uint256 amount) = PROXY.royaltyInfo(1, 1 ether);
+        assertEq(receiver, admin);
+        assertEq(amount, 0.1 ether);
+
+        // what SuperRare's Bazaar would now pay out on a 1 ETH resale
+        (address payable[] memory recipients, uint256[] memory amounts) =
+            ENGINE.getRoyaltyView(address(PROXY), 1, 1 ether);
+        assertEq(recipients.length, 1);
+        assertEq(recipients[0], admin);
+        assertEq(amounts[0], 0.1 ether);
     }
 }

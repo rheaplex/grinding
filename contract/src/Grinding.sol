@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import {ERC2981Upgradeable} from "@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IERC4906} from "@openzeppelin/contracts/interfaces/IERC4906.sol";
@@ -23,9 +24,11 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 ///         `ipfs://<cid>/<n>`. Metadata changes are announced with ERC-4906
 ///         events so marketplaces such as OpenSea refresh their caches, and
 ///         the collection metadata is exposed via ERC-7572 `contractURI()`.
+///         The admin also sets the collection-wide ERC-2981 royalty, which
+///         marketplaces (and the Royalty Registry) read to pay resale royalties.
 ///
 ///         Upgradeable via UUPS: the admin may upgrade the implementation.
-contract Grinding is ERC721Upgradeable, OwnableUpgradeable, UUPSUpgradeable, IERC4906 {
+contract Grinding is ERC721Upgradeable, ERC2981Upgradeable, OwnableUpgradeable, UUPSUpgradeable, IERC4906 {
     using Strings for uint256;
 
     /// @notice Fixed edition size. All tokens are minted at initialization;
@@ -78,6 +81,9 @@ contract Grinding is ERC721Upgradeable, OwnableUpgradeable, UUPSUpgradeable, IER
     event TokenConfigCleared(uint256 indexed tokenId);
     /// @notice ERC-7572: the collection metadata changed.
     event ContractURIUpdated();
+    /// @notice The admin set (or, with a zero receiver and fee, removed) the
+    ///         collection-wide ERC-2981 royalty.
+    event DefaultRoyaltySet(address indexed receiver, uint96 feeBasisPoints);
 
     /// @notice `msg.sender` does not own the token it tried to configure.
     error NotTokenOwner(uint256 tokenId, address sender);
@@ -127,6 +133,24 @@ contract Grinding is ERC721Upgradeable, OwnableUpgradeable, UUPSUpgradeable, IER
 
     function _baseURI() internal view override returns (string memory) {
         return _storage().baseTokenURI;
+    }
+
+    // ---- royalties (admin) --------------------------------------------------
+
+    /// @notice Set the ERC-2981 royalty every token reports: `feeBasisPoints`
+    ///         of the sale price (out of 10,000, so 1000 is 10%) to `receiver`.
+    ///         Read by OpenSea, the SuperRare Bazaar (via the Royalty Registry),
+    ///         and any other marketplace that honours the standard. Reverts on
+    ///         a zero receiver or a fee above 100%.
+    function setDefaultRoyalty(address receiver, uint96 feeBasisPoints) external onlyOwner {
+        _setDefaultRoyalty(receiver, feeBasisPoints);
+        emit DefaultRoyaltySet(receiver, feeBasisPoints);
+    }
+
+    /// @notice Remove the royalty: `royaltyInfo` returns the zero address and 0.
+    function deleteDefaultRoyalty() external onlyOwner {
+        _deleteDefaultRoyalty();
+        emit DefaultRoyaltySet(address(0), 0);
     }
 
     // ---- per-token configuration -------------------------------------------
@@ -198,11 +222,12 @@ contract Grinding is ERC721Upgradeable, OwnableUpgradeable, UUPSUpgradeable, IER
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    /// @dev 0x49064906 is the ERC-4906 interface id, per the EIP.
+    /// @dev 0x49064906 is the ERC-4906 interface id, per the EIP. ERC-721 and
+    ///      ERC-2981 answer for themselves up the inheritance chain.
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721Upgradeable, IERC165)
+        override(ERC721Upgradeable, ERC2981Upgradeable, IERC165)
         returns (bool)
     {
         return interfaceId == bytes4(0x49064906) || super.supportsInterface(interfaceId);
